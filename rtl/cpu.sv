@@ -101,10 +101,26 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
 
     assign pc_target = pc_cur + imm;
 
+    logic lt, ltu;
+    assign lt  = $signed(rs1_data) < $signed(rs2_data); // signed compare
+    assign ltu = rs1_data < rs2_data;                   // unsigned compare
+
     // ---------- Branch decision ----------
     logic take_branch;
 
-    assign take_branch = branch & (funct3[0] ? ~alu_zero : alu_zero);
+    logic br_cond;
+    always_comb begin
+        case (funct3)
+            3'b000:  br_cond = alu_zero;
+            3'b001:  br_cond = ~alu_zero;
+            3'b100:  br_cond = lt;
+            3'b101:  br_cond = ~lt;
+            3'b110:  br_cond = ltu;
+            3'b111:  br_cond = ~ltu;
+            default: br_cond = 1'b0;
+        endcase
+    end
+    assign take_branch = branch & br_cond;
 
     
 
