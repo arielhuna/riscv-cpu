@@ -7,3 +7,6 @@ xsim.dir/
 *.pb
 *.wdb
 *.vcd
+
+# Generated reference page (the PDF is committed)
+docs/*.html

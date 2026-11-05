@@ -81,12 +81,15 @@ CPU-level tests run a program and check the final register file and data memory:
 
 - **`sim.bat`**: compiles all packages and modules, then elaborates and runs one testbench in XSim.
 
+- **[`docs/rv32i_reference.pdf`](docs/rv32i_reference.pdf)**: instruction reference for this core: encodings, behaviour, control signals per opcode and machine-code examples. Regenerate after changing the control unit with `python docs/make_isa_ref.py` (needs Chrome or Edge).
+
 ## Layout
 
 ```
 rtl/        design (rtl/pkg/ compiled first)
 tb/         testbenches (tb_<name>.sv)
 programs/   assembly sources (.s) and hex programs
+docs/       instruction reference (PDF + generator)
 rvasm.py    assembler
 ```
 
