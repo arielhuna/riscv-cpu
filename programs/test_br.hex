@@ -1,0 +1,13 @@
+FFF00093  // 0x00  ADDI x1, x0, -1
+00800113  // 0x04  ADDI x2, x0, 8
+0020C463  // 0x08  BLT x1, x2, t1
+00100513  // 0x0C  ADDI x10, x0, 1
+0020E463  // 0x10  t1: BLTU x1, x2, t2
+00100593  // 0x14  ADDI x11, x0, 1
+0020D463  // 0x18  t2: BGE x1, x2, t3
+00100613  // 0x1C  ADDI x12, x0, 1
+0020F463  // 0x20  t3: BGEU x1, x2, t4
+00100693  // 0x24  ADDI x13, x0, 1
+123452B7  // 0x28  t4: LUI x5, 0x12345
+00001317  // 0x2C  AUIPC x6, 0x1
+0000006F  // 0x30  done: JAL x0, done
