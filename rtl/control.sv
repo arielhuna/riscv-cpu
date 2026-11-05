@@ -6,6 +6,7 @@ module control import alu_pkg::*, rv32i_pkg::*; (
     input  logic       instr30,
     output alu_op_t    alu_op,
     output logic       alu_src,
+    output logic [1:0] alu_a_sel,
     output logic [1:0] wb_sel,
     output logic       reg_we,
     output logic       mem_we,
@@ -18,6 +19,7 @@ module control import alu_pkg::*, rv32i_pkg::*; (
         // Safe defaults: unknown instruction = NOP
         alu_op  = ALU_ADD;
         alu_src = 1'b0;
+        alu_a_sel = 2'd0;
         wb_sel  = 2'd0;
         reg_we  = 1'b0;
         mem_we  = 1'b0;
@@ -75,7 +77,22 @@ module control import alu_pkg::*, rv32i_pkg::*; (
                 wb_sel = 2'd2;
                 reg_we = 1'b1;
                 jalr   = 1'b1;
+            end
+            
+            OP_LUI: begin
+                alu_op    = ALU_ADD;
+                alu_src   = 1'b1;
+                reg_we    = 1'b1;
+                alu_a_sel = 2'd2;
+                wb_sel    = 2'b0;
+            end
 
+            OP_AUIPC: begin
+                alu_op    = ALU_ADD;
+                alu_src   = 1'b1;
+                reg_we    = 1'b1;
+                alu_a_sel = 2'd1;
+                wb_sel    = 2'b0;
             end
 
             default: ;

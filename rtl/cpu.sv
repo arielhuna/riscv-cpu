@@ -54,6 +54,7 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     alu_op_t     alu_op;
     logic        alu_src, reg_we, mem_we, branch, jump, jalr;
     logic [1:0]  wb_sel;
+    logic [1:0]  alu_a_sel;
 
     control u_control (
         .opcode  (opcode),
@@ -61,6 +62,7 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
         .instr30 (instr30),
         .alu_op  (alu_op),
         .alu_src (alu_src),
+        .alu_a_sel (alu_a_sel),
         .wb_sel  (wb_sel),
         .reg_we  (reg_we),
         .mem_we  (mem_we),
@@ -84,8 +86,15 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     logic [31:0] alu_a, alu_b;
     logic [31:0] alu_out;
     logic        alu_zero;
+    
 
-    assign alu_a = rs1_data;
+    always_comb begin
+        case (alu_a_sel)
+            2'd1:    alu_a = pc_cur;
+            2'd2:    alu_a = 32'h00000000;
+            default: alu_a = rs1_data;
+        endcase
+    end
     assign alu_b = alu_src ? imm : rs2_data;   // 0 = rs2, 1 = imm
 
     alu u_alu (
