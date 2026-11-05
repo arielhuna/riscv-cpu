@@ -1,0 +1,28 @@
+00500293  // 0x00  ADDI t0, x0, 5
+00502023  // 0x04  SW t0, 0(x0)
+FFD00293  // 0x08  ADDI t0, x0, -3
+00502223  // 0x0C  SW t0, 4(x0)
+00900293  // 0x10  ADDI t0, x0, 9
+00502423  // 0x14  SW t0, 8(x0)
+00002623  // 0x18  SW x0, 0xC(x0)
+00000513  // 0x1C  ADDI a0, x0, 0
+00400593  // 0x20  ADDI a1, x0, 4
+008000EF  // 0x24  JAL ra, sort
+0000006F  // 0x28  done: JAL x0, done
+FFF58313  // 0x2C  sort: ADDI t1, a1, -1
+00000293  // 0x30  ADDI t0, x0, 0
+0262DC63  // 0x34  outer: BGE t0, t1, end_sort
+00000393  // 0x38  ADDI t2, x0, 0
+00050E13  // 0x3C  ADDI t3, a0, 0
+0263D263  // 0x40  inner: BGE t2, t1, inner_end
+000E2E83  // 0x44  LW t4, 0(t3)
+004E2F03  // 0x48  LW t5, 4(t3)
+01DF5663  // 0x4C  BGE t5, t4, no_swap
+01EE2023  // 0x50  SW t5, 0(t3)
+01DE2223  // 0x54  SW t4, 4(t3)
+00138393  // 0x58  ADDI t2, t2, 1
+004E0E13  // 0x5C  ADDI t3, t3, 4
+FE1FF06F  // 0x60  JAL x0, inner
+00128293  // 0x64  ADDI t0, t0, 1
+FCDFF06F  // 0x68  JAL x0, outer
+00008067  // 0x6C  JALR x0, 0(ra)
