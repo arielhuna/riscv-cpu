@@ -97,6 +97,7 @@ rvasm.py    assembler
 
 ```
 .\sim <name>      # runs tb\tb_<name>.sv, e.g. .\sim cpu_ldst
+.\run_all         # runs every tb\tb_*.sv, summary in regression.txt
 ```
 
 ## Roadmap

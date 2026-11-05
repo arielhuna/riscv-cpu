@@ -10,3 +10,6 @@ xsim.dir/
 
 # Generated reference page (the PDF is committed)
 docs/*.html
+
+# Output of run_all.bat
+regression.txt
