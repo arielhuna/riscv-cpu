@@ -425,7 +425,7 @@ def build_html():
     n_ins = sum(len(g["rows"]) for g in GROUPS)
 
     def foot(n, total):
-        return (f'<div class="pfoot"><span>arielhone/riscv-cpu · RV32I single-cycle core · reference</span>'
+        return (f'<div class="pfoot"><span>arielhuna/riscv-cpu · RV32I single-cycle core · reference</span>'
                 f'<span>{today} · page {n} / {total}</span></div>')
 
     total = 5
@@ -437,7 +437,7 @@ def build_html():
 <div class="page">
   <div class="cover">
     <div class="kicker">Instruction reference</div>
-    <h1>RV32I on arielhone/riscv-cpu</h1>
+    <h1>RV32I on arielhuna/riscv-cpu</h1>
     <p class="lead">Every instruction this single-cycle SystemVerilog core executes: encoding, behaviour,
     the control signals <span class="mono">rtl/control.sv</span> drives for it, and a machine-code example
     produced by <span class="mono">rvasm.py</span>.</p>
@@ -562,7 +562,7 @@ def build_html():
 </div>"""
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>RV32I reference · arielhone/riscv-cpu</title><style>{CSS}</style></head>
+<title>RV32I reference · arielhuna/riscv-cpu</title><style>{CSS}</style></head>
 <body>{page1}{page2}{page3}{page4}{page5}</body></html>"""
 
 
