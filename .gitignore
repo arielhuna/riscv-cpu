@@ -13,3 +13,7 @@ docs/*.html
 
 # Output of run_all.bat
 regression.txt
+
+
+# Python bytecode cache
+__pycache__/
