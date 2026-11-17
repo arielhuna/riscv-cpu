@@ -132,4 +132,61 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         end
     end
 
+    // ==================== EX ====================
+    // Everything here comes from the ID/EX card
+    logic [31:0] alu_a, alu_b;
+    logic [31:0] alu_out;
+    logic        alu_zero;
+
+    always_comb begin
+        case (id_ex.alu_a_sel)
+            2'd1:    alu_a = id_ex.pc;          // AUIPC
+            2'd2:    alu_a = 32'h00000000;      // LUI
+            default: alu_a = id_ex.rs1_data;
+        endcase
+    end
+    assign alu_b = id_ex.alu_src ? id_ex.imm : id_ex.rs2_data;
+
+    alu u_alu (
+        .a      (alu_a),
+        .b      (alu_b),
+        .alu_op (id_ex.alu_op),
+        .zero   (alu_zero),
+        .result (alu_out)
+    );
+
+    // ---------- Branch / jump target ----------
+    logic [31:0] pc_target;
+    assign pc_target = id_ex.pc + id_ex.imm;    // PC of THIS instruction
+
+    logic lt, ltu;
+    assign lt  = $signed(id_ex.rs1_data) < $signed(id_ex.rs2_data);
+    assign ltu = id_ex.rs1_data < id_ex.rs2_data;
+
+    // ---------- Branch decision ----------
+    logic br_cond, take_branch;
+
+    always_comb begin
+        case (id_ex.funct3)
+            3'b000:  br_cond = alu_zero;        // BEQ
+            3'b001:  br_cond = ~alu_zero;       // BNE
+            3'b100:  br_cond = lt;              // BLT
+            3'b101:  br_cond = ~lt;             // BGE
+            3'b110:  br_cond = ltu;             // BLTU
+            3'b111:  br_cond = ~ltu;            // BGEU
+            default: br_cond = 1'b0;
+        endcase
+    end
+    assign take_branch = id_ex.branch & br_cond;
+
+    // ---------- Next PC ----------
+    always_comb begin
+        case ({id_ex.jalr, id_ex.jump | take_branch})
+            2'b10:   pc_next = {alu_out[31:1], 1'b0};  // JALR
+            2'b01:   pc_next = pc_target;              // JAL, taken branch
+            default: pc_next = pc_plus4;               // keep fetching
+        endcase
+    end
+
+
 endmodule
