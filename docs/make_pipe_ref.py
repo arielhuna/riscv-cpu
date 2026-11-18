@@ -10,7 +10,7 @@ instructions move in, the hazards and how lessons 27-29 remove them.
     python docs/make_pipe_ref.py --html     # .html only (open it, Ctrl+P)
 
 Same look and the same Chrome/Edge headless print as make_isa_ref.py.
-Edit the tables below when a card gets a new field (EX/MEM, MEM/WB in 26b).
+Edit the tables below when a card gets a new field.
 """
 
 import argparse
@@ -191,7 +191,7 @@ def strip():
   <div class="bd">{e(job)}<ul>{items}</ul>
   <div class="rd">reads <span class="mono">{e(reads)}</span></div></div></div>""")
         if i < 4:
-            cls = "reg" if i < 2 else "reg next"
+            cls = "reg"
             out.append(f'<div class="{cls}"><span>{STAGES[i]}/{STAGES[i + 1]}</span></div>')
     return f'<div class="strip">{"".join(out)}</div>'
 
@@ -312,7 +312,7 @@ def build_html():
   </div>
 
   <section class="block">
-    <h2>The five stages <small>left to right = order · grey bars = cards (hatched = lesson 26b)</small></h2>
+    <h2>The five stages <small>left to right = order · grey bars = cards</small></h2>
     {strip()}
   </section>
 
@@ -359,9 +359,10 @@ def build_html():
     </div>
     <div>
       {card("EX/MEM", EX_MEM, "EX", "pc + 4 is computed from <span class='mono'>id_ex.pc</span>, not from "
-            "<span class='mono'>pc_plus4</span> (that one belongs to IF).", planned=True)}
+            "<span class='mono'>pc_plus4</span> (that one belongs to IF).")}
       {card("MEM/WB", MEM_WB, "MEM", "WB drives the regfile write port: "
-            "<span class='mono'>wb_we = mem_wb.reg_we, wb_rd = mem_wb.rd</span>.", planned=True)}
+            "<span class='mono'>wb_we = mem_wb.reg_we, wb_rd = mem_wb.rd</span>. "
+            "One driver per wire: the TEMP 0 assigns in ID were deleted, not kept.")}
       <div class="note"><b>Why a struct packed:</b> all fields glued into one vector, first field = top bits
       (<span class="mono">if_id_t = {{pc, instr}}</span>, 64 bits). One register, one reset line,
       but every field still has a name: <span class="mono">id_ex.rd</span>.</div>
@@ -480,7 +481,7 @@ def build_html():
     <div class="cols">
       <div>{dg}
         <p style="margin-top:1.4mm"><b>add</b> reads t0 in ID at c3, but <b>addi</b> writes it only at the end of c5. Until lesson 27
-        (and in the 26b test) this is solved with <b>3 NOPs</b> between dependent instructions.</p>
+        (and in <span class="mono">test_pipe_b</span>) this is solved with <b>3 NOPs</b> between dependent instructions.</p>
         {dg_nop}</div>
       <div><p>The value exists much earlier: it is in <span class="mono">ex_mem.alu_out</span> one cycle after EX.
         Forwarding is a MUX in front of the ALU that takes the newest copy:</p>
@@ -561,8 +562,8 @@ else
   <section class="block">
     <h2>Roadmap <small>lessons 26–30</small></h2>
     {simple_table(["Lesson", "Adds", "Test"], [
-        ("26a", "pipe_pkg, IF/ID, ID/EX, EX stage", m("tb_cpu_pipe_a") + " · cards cycle by cycle"),
-        ("26b", "EX/MEM, MEM/WB, WB drives regfile", "program with 3 NOPs between dependents"),
+        ("26a ✓", "pipe_pkg, IF/ID, ID/EX, EX stage", m("tb_cpu_pipe_a") + " · 22 checks, cards cycle by cycle"),
+        ("26b ✓", "EX/MEM, MEM/WB, MEM stage, WB drives regfile", m("tb_cpu_pipe_b") + " · 13 checks, 3 instr between dependents, 2 NOPs after jumps"),
         ("27", "forwarding + regfile bypass", "remove the NOPs"),
         ("28", "load-use stall (hazard unit)", "lw followed by use"),
         ("29", "flush on taken branch / jump", m("test_sort") + " on cpu_pipe"),
