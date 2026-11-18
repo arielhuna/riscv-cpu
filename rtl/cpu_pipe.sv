@@ -87,10 +87,6 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     logic [4:0]  wb_rd;
     logic [31:0] wb_data;
 
-    assign wb_we   = 1'b0;      // TEMP: driven by MEM/WB in lesson 26b
-    assign wb_rd   = 5'd0;      // TEMP
-    assign wb_data = 32'h0;     // TEMP
-
     regfile u_regfile (
         .clk      (clk),
         .we       (wb_we),
@@ -211,5 +207,110 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             ex_mem.reg_we   <= id_ex.reg_we;
         end
     end
+
+
+    // ==================== MEM ====================
+    // Everything here comes from the EX/MEM card
+
+    // ---------- Store: replicate data to every lane ----------
+    logic [31:0] st_data;
+
+    always_comb begin
+        case (ex_mem.funct3)
+            3'b000:  st_data = {4{ex_mem.rs2_data[7:0]}};    // SB
+            3'b001:  st_data = {2{ex_mem.rs2_data[15:0]}};   // SH
+            default: st_data = ex_mem.rs2_data;              // SW
+        endcase
+    end
+
+
+// ---------- Store: byte enables ----------
+    logic [3:0] st_be;
+
+    always_comb begin
+        case (ex_mem.funct3)
+            3'b000:  st_be = 4'b0001 << ex_mem.alu_out[1:0];            // SB
+            3'b001:  st_be = ex_mem.alu_out[1] ? 4'b1100 : 4'b0011;     // SH
+            default: st_be = 4'b1111;                            // SW
+        endcase
+    end
+
+    // ---------- Data memory ----------
+    logic [31:0] dmem_rdata;
+
+    dmem u_dmem (
+        .clk   (clk),
+        .we    (ex_mem.mem_we),
+        .be    (st_be),
+        .addr  (ex_mem.alu_out),
+        .wdata (st_data),
+        .rdata (dmem_rdata)
+    );
+
+    // ---------- Load: pick the byte ----------
+    logic [7:0] ld_byte;
+
+    always_comb begin
+        case (ex_mem.alu_out[1:0])
+            2'b00:   ld_byte = dmem_rdata[7:0];
+            2'b01:   ld_byte = dmem_rdata[15:8];
+            2'b10:   ld_byte = dmem_rdata[23:16];
+            default: ld_byte = dmem_rdata[31:24];
+        endcase
+    end
+
+    // ---------- Load: pick the halfword ----------
+    logic [15:0] ld_half;
+
+    assign ld_half = ex_mem.alu_out[1] ? dmem_rdata[31:16] : dmem_rdata[15:0];
+
+    // ---------- Load: extend to 32 bits ----------
+    logic [31:0] ld_data;
+
+    always_comb begin
+        case (ex_mem.funct3)
+            3'b000:  ld_data = {{24{ld_byte[7]}}, ld_byte};    // LB
+            3'b010:  ld_data = dmem_rdata;                     // LW
+            3'b100:  ld_data = {{24{1'b0}}, ld_byte};          // LBU
+            3'b001:  ld_data = {{16{ld_half[15]}}, ld_half};   // LH
+            3'b101:  ld_data = {{16{1'b0}}, ld_half};          // LHU
+            default: ld_data = dmem_rdata;
+        endcase
+    end
+
+
+    // ---------- MEM/WB register ----------
+    mem_wb_t mem_wb;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            mem_wb <= '0;                  // reg_we = 0 -> NOP
+        end else begin
+            // data
+            mem_wb.pc_plus4 <= ex_mem.pc_plus4;
+            mem_wb.alu_out  <= ex_mem.alu_out;
+            mem_wb.ld_data  <= ld_data;
+            // fields
+            mem_wb.rd       <= ex_mem.rd;
+            // control
+            mem_wb.wb_sel   <= ex_mem.wb_sel;
+            mem_wb.reg_we   <= ex_mem.reg_we;
+        end
+    end
+
+    // ==================== WB ====================
+    // Everything here comes from the MEM/WB card
+    assign wb_we = mem_wb.reg_we;
+    assign wb_rd = mem_wb.rd;
+
+    always_comb begin
+        case (mem_wb.wb_sel)
+            2'd0:    wb_data = mem_wb.alu_out;    // R, I, LUI, AUIPC
+            2'd1:    wb_data = mem_wb.ld_data;    // loads
+            2'd2:    wb_data = mem_wb.pc_plus4;   // JAL, JALR
+            default: wb_data = mem_wb.alu_out;    // 2'd3 unused
+        endcase
+    end
+
 
 endmodule
