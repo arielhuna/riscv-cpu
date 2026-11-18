@@ -179,6 +179,8 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     end
     assign take_branch = id_ex.branch & br_cond;
 
+
+
     // ---------- Next PC ----------
     always_comb begin
         case ({id_ex.jalr, id_ex.jump | take_branch})
@@ -188,5 +190,26 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         endcase
     end
 
+
+    // ---------- EX/MEM register ----------
+    ex_mem_t ex_mem;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            ex_mem <= '0;                          // reg_we = mem_we = 0 -> NOP
+        end else begin
+            // data
+            ex_mem.pc_plus4 <= id_ex.pc + 32'd4;             // THIS instruction's pc + 4
+            ex_mem.alu_out  <= alu_out;               // born in EX
+            ex_mem.rs2_data <= id_ex.rs2_data;               // x5 for SW
+            // fields
+            ex_mem.rd       <= id_ex.rd;
+            ex_mem.funct3   <= id_ex.funct3;
+            // control
+            ex_mem.mem_we   <= id_ex.mem_we;
+            ex_mem.wb_sel   <= id_ex.wb_sel;
+            ex_mem.reg_we   <= id_ex.reg_we;
+        end
+    end
 
 endmodule
