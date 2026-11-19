@@ -1,0 +1,26 @@
+00500293  // 0x00  addi t0, x0, 5
+FFD00313  // 0x04  addi t1, x0, -3
+006283B3  // 0x08  add t2, t0, t1
+00100413  // 0x0C  addi s0, x0, 1
+00200413  // 0x10  addi s0, x0, 2
+008404B3  // 0x14  add s1, s0, s0
+00700513  // 0x18  addi a0, x0, 7
+00000013  // 0x1C  nop
+00000013  // 0x20  nop
+00A505B3  // 0x24  add a1, a0, a0
+06300693  // 0x28  addi a3, x0, 99
+04D02023  // 0x2C  sw a3, 64(x0)
+04002703  // 0x30  lw a4, 64(x0)
+00100913  // 0x34  addi s2, x0, 1
+012707B3  // 0x38  add a5, a4, s2
+00900013  // 0x3C  addi x0, x0, 9
+00000FB3  // 0x40  add t6, x0, x0
+FFF00E13  // 0x44  addi t3, x0, -1
+000E4863  // 0x48  blt t3, x0, skip
+00000013  // 0x4C  nop
+00000013  // 0x50  nop
+03700E93  // 0x54  addi t4, x0, 55
+00100F13  // 0x58  skip: addi t5, x0, 1
+0000006F  // 0x5C  done: jal x0, done
+00000013  // 0x60  nop
+00000013  // 0x64  nop
