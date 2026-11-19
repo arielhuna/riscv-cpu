@@ -436,7 +436,8 @@ def build_html():
         <div class="rule"><span class="n">4</span><div><b>Two exceptions, both correct.</b> <span class="mono">pc_next</span>'s default is
           <span class="mono">pc_plus4</span> of IF (keep fetching), and the regfile write port comes from WB while the read ports serve ID.</div></div>
         <div class="rule"><span class="n">5</span><div><b>Read in ID, write in WB, same cycle.</b> Separate ports, so no structural
-          conflict. Without an internal bypass the read sees the OLD value (lesson 27 adds the bypass).</div></div>
+          conflict. The write lands on the edge AFTER the read, so ID would see the OLD value: lesson 27 adds a WB&rarr;ID bypass in
+          <span class="mono">cpu_pipe</span> (not in <span class="mono">regfile</span>: in single-cycle that is a combinational loop).</div></div>
         <div class="rule"><span class="n">6</span><div><b>Cancel = turn into NOP.</b> Reset, a bubble and a flush all mean:
           <span class="mono">reg_we = 0</span>, <span class="mono">mem_we = 0</span>, no jump.</div></div>
       </div>
@@ -485,17 +486,24 @@ def build_html():
         {dg_nop}</div>
       <div><p>The value exists much earlier: it is in <span class="mono">ex_mem.alu_out</span> one cycle after EX.
         Forwarding is a MUX in front of the ALU that takes the newest copy:</p>
-<pre class="code"><span class="c">// forward A (same for rs2 / B)</span>
-if (ex_mem.reg_we &amp;&amp; ex_mem.rd != 0
-    &amp;&amp; ex_mem.rd == id_ex.rs1)
-    fwd_a = ex_mem.alu_out;   <span class="c">// 1 instr back</span>
-else if (mem_wb.reg_we &amp;&amp; mem_wb.rd != 0
-    &amp;&amp; mem_wb.rd == id_ex.rs1)
-    fwd_a = wb_data;          <span class="c">// 2 instr back</span>
-else
-    fwd_a = id_ex.rs1_data;   <span class="c">// from regfile</span></pre>
-        <p style="margin-top:1.2mm">Order matters: EX/MEM first, it is newer. <span class="mono">rd != 0</span>: x0 is never forwarded.
-        3 back is covered by the regfile bypass (write and read in the same cycle).</p></div>
+<pre class="code"><span class="c">// EX: detection (same for b / rs2)</span>
+assign ex_hit_a = ex_mem.reg_we &amp;&amp; (ex_mem.rd != 5'd0)
+                &amp;&amp; (ex_mem.rd == id_ex.rs1);
+assign wb_hit_a = mem_wb.reg_we &amp;&amp; (mem_wb.rd != 5'd0)
+                &amp;&amp; (mem_wb.rd == id_ex.rs1);
+always_comb begin                 <span class="c">// newest wins</span>
+    if (ex_hit_a)      fwd_a_val = ex_mem.alu_out;
+    else if (wb_hit_a) fwd_a_val = wb_data;
+    else               fwd_a_val = id_ex.rs1_data;
+end
+<span class="c">// ID: WB writes what ID reads, same cycle</span>
+assign id_rs1_val = (wb_we &amp;&amp; (wb_rd != 5'd0)
+    &amp;&amp; (wb_rd == rs1)) ? wb_data : rs1_data;</pre>
+        <p style="margin-top:1.2mm"><b>Consumers:</b> <span class="mono">alu_a</span> default, <span class="mono">alu_b</span>,
+        <span class="mono">lt</span>/<span class="mono">ltu</span>, store data <span class="mono">ex_mem.rs2_data</span>;
+        <span class="mono">id_ex.rs*_data &lt;= id_rs*_val</span>.
+        From WB forward <span class="mono">wb_data</span> (what is written: LW &rarr; <span class="mono">ld_data</span>, not the address).
+        Distance 1 &rarr; EX/MEM, 2 &rarr; MEM/WB, 3 &rarr; ID bypass, 4+ &rarr; regfile.</p></div>
     </div></div>
 
   <div class="hz"><h3>{stag("MEM")}<span>Load-use</span><span class="cost">lesson 28 · stall 1 cycle</span></h3>
@@ -553,6 +561,8 @@ else
         ("Field is x or of another instruction", "one hop not copied into the next card", "follow the signal card by card"),
         ("Writes happen during reset / flush", "card reset leaves reg_we or mem_we = 1", m("'0") + " or NOP instr"),
         ("Value correct 3 instr later, not 1–2", "no forwarding yet", "NOPs (26b) / forwarding (27)"),
+        ("Use right after LW gets the address", "WB forwards " + m("mem_wb.alu_out"), "forward " + m("wb_data")),
+        ("Back-to-back writes: old value used", "WB checked before EX/MEM", "EX/MEM first (newest)"),
         ("x0 becomes non-zero via forwarding", "missing " + m("rd != 0"), "add the guard"),
         ("Program runs code after a taken jump", "no flush yet", "NOPs after jumps (26b) / flush (29)"),
         ("tb fails by one cycle", "counted the stage, not the cycle", "draw the instr × cycle grid"),
@@ -564,7 +574,7 @@ else
     {simple_table(["Lesson", "Adds", "Test"], [
         ("26a ✓", "pipe_pkg, IF/ID, ID/EX, EX stage", m("tb_cpu_pipe_a") + " · 22 checks, cards cycle by cycle"),
         ("26b ✓", "EX/MEM, MEM/WB, MEM stage, WB drives regfile", m("tb_cpu_pipe_b") + " · 13 checks, 3 instr between dependents, 2 NOPs after jumps"),
-        ("27", "forwarding + regfile bypass", "remove the NOPs"),
+        ("27 ✓", "forwarding (EX/MEM, MEM/WB) + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
         ("28", "load-use stall (hazard unit)", "lw followed by use"),
         ("29", "flush on taken branch / jump", m("test_sort") + " on cpu_pipe"),
         ("30", "CPI, Basys 3 synthesis, Fmax vs single-cycle", m("synth_check -top cpu_pipe")),
