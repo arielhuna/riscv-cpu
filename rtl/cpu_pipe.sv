@@ -98,6 +98,12 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         .rs2_data (rs2_data)
     );
 
+    // WB -> ID bypass: WB writes the register ID reads in the same cycle
+    logic [31:0] id_rs1_val, id_rs2_val;
+    assign id_rs1_val = (wb_we && (wb_rd != 5'd0) && (wb_rd == rs1)) ? wb_data : rs1_data;
+    assign id_rs2_val = (wb_we && (wb_rd != 5'd0) && (wb_rd == rs2)) ? wb_data : rs2_data;
+
+
     // ---------- ID/EX register ----------
     id_ex_t id_ex;
 
@@ -107,8 +113,8 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         end else begin
             // data
             id_ex.pc        <= if_id.pc;
-            id_ex.rs1_data  <= rs1_data;
-            id_ex.rs2_data  <= rs2_data;
+            id_ex.rs1_data  <= id_rs1_val;
+            id_ex.rs2_data  <= id_rs2_val;
             id_ex.imm       <= imm;
             // fields
             id_ex.rd        <= rd;
@@ -134,14 +140,41 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     logic [31:0] alu_out;
     logic        alu_zero;
 
+    // Forwarding detection: does the instruction in MEM write the register EX reads?
+    logic ex_hit_a, ex_hit_b;
+    assign ex_hit_a = ex_mem.reg_we && (ex_mem.rd != 5'd0) && (ex_mem.rd == id_ex.rs1);
+    assign ex_hit_b = ex_mem.reg_we && (ex_mem.rd != 5'd0) && (ex_mem.rd == id_ex.rs2);
+
+
+    // Does the instruction in WB write the register EX reads?
+    logic wb_hit_a, wb_hit_b;
+    assign wb_hit_a = mem_wb.reg_we && (mem_wb.rd != 5'd0) && (mem_wb.rd == id_ex.rs1);
+    assign wb_hit_b = mem_wb.reg_we && (mem_wb.rd != 5'd0) && (mem_wb.rd == id_ex.rs2);
+
+    logic [31:0] fwd_a_val;
+    always_comb begin
+        if (ex_hit_a)      fwd_a_val = ex_mem.alu_out;   // newest write wins
+        else if (wb_hit_a) fwd_a_val = wb_data;
+        else               fwd_a_val = id_ex.rs1_data;
+    end
+
+    
+    logic [31:0] fwd_b_val;
+    always_comb begin
+        if (ex_hit_b)      fwd_b_val = ex_mem.alu_out;   // newest write wins
+        else if (wb_hit_b) fwd_b_val = wb_data;
+        else               fwd_b_val = id_ex.rs2_data;
+    end
+
+
     always_comb begin
         case (id_ex.alu_a_sel)
             2'd1:    alu_a = id_ex.pc;          // AUIPC
             2'd2:    alu_a = 32'h00000000;      // LUI
-            default: alu_a = id_ex.rs1_data;
+            default: alu_a = fwd_a_val;
         endcase
     end
-    assign alu_b = id_ex.alu_src ? id_ex.imm : id_ex.rs2_data;
+    assign alu_b = id_ex.alu_src ? id_ex.imm : fwd_b_val;
 
     alu u_alu (
         .a      (alu_a),
@@ -156,8 +189,8 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     assign pc_target = id_ex.pc + id_ex.imm;    // PC of THIS instruction
 
     logic lt, ltu;
-    assign lt  = $signed(id_ex.rs1_data) < $signed(id_ex.rs2_data);
-    assign ltu = id_ex.rs1_data < id_ex.rs2_data;
+    assign lt  = $signed(fwd_a_val) < $signed(fwd_b_val);
+    assign ltu = fwd_a_val < fwd_b_val;
 
     // ---------- Branch decision ----------
     logic br_cond, take_branch;
@@ -197,7 +230,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             // data
             ex_mem.pc_plus4 <= id_ex.pc + 32'd4;             // THIS instruction's pc + 4
             ex_mem.alu_out  <= alu_out;               // born in EX
-            ex_mem.rs2_data <= id_ex.rs2_data;               // x5 for SW
+            ex_mem.rs2_data <= fwd_b_val;               // x5 for SW
             // fields
             ex_mem.rd       <= id_ex.rd;
             ex_mem.funct3   <= id_ex.funct3;
