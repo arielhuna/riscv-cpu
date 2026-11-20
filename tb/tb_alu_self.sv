@@ -7,7 +7,7 @@ module tb_alu_self
     logic [31:0] result;
     logic        zero;
     int          errors;
-    int          tests; 
+    int          tests;
 
     // array of all ALU operations
     alu_op_t all_ops[10] = '{ALU_ADD, ALU_SUB, ALU_SLL, ALU_SLT, ALU_SLTU,
@@ -39,7 +39,7 @@ module tb_alu_self
         endcase
     endfunction
 
-    // 
+    //
     task automatic check(
         input logic [31:0] ta, tb_,
         input alu_op_t     top

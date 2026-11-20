@@ -4,7 +4,7 @@
         ADDI  t0, x0, 5
         SW    t0, 0(x0)       # a[0] = 5
         ADDI  t0, x0, -3      # a[1] = -3
-        SW    t0, 4(x0)       
+        SW    t0, 4(x0)
         ADDI  t0, x0, 9       # a[2] = 9
         SW    t0, 8(x0)
         SW    x0, 0xC(x0)     # a[3] = 0 (x0 is always zero)
@@ -14,7 +14,6 @@
         ADDI  a1, x0, 4       # a1 = n
         JAL   ra, sort
 done:   JAL   x0, done
-
 
 # --- sort(p = a0, n = a1) ---
 sort:   ADDI  t1, a1, -1       # t1 = n - 1

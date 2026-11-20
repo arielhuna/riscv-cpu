@@ -1,10 +1,15 @@
 # RISC-V CPU
 
-Single-cycle RV32I processor written from scratch in SystemVerilog. Simulation only (Vivado XSim).
+RV32I processor written from scratch in SystemVerilog, in two versions:
 
-Every module was built and verified on its own with a self-checking testbench before being wired into the CPU, and the CPU itself is verified by running real RV32I programs and checking register and memory state.
+- **`cpu`**: single-cycle core, all 37 base instructions (tag `v1-single-cycle`).
+- **`cpu_pipe`**: 5-stage pipeline (IF, ID, EX, MEM, WB) with forwarding, a WB→ID bypass and a load-use hazard unit. Flush on taken branches is next.
 
-## Datapath
+Simulated in Vivado XSim; both cores elaborate cleanly for the Basys 3 board (Artix-7 `xc7a35tcpg236-1`).
+
+Every module was built and verified on its own with a self-checking testbench before being wired into the CPU, and both cores are verified by running real RV32I programs and checking register and memory state.
+
+## Single-cycle datapath
 
 ```mermaid
 flowchart LR
@@ -56,7 +61,26 @@ Encodings, behaviour and control signals for each one: [`docs/rv32i_reference.pd
 | Upper immediate | LUI, AUIPC | `tb_cpu_br` |
 | Full program | bubble sort: nested loops, signed compare, call / return | `tb_cpu_sort` |
 
-Full regression: `.\run_all` runs 14 self-checking testbenches, 7,802 checks, all passing.
+Full regression: `.\run_all` runs 18 self-checking testbenches, 7,864 checks, all passing.
+
+### Pipeline
+
+`rtl/cpu_pipe.sv` splits the same datapath into five stages. Each pipeline register is a `struct packed` "card" (`rtl/pkg/pipe_pkg.sv`) that carries everything the instruction still needs, including its own `pc`, `rd` and control bits.
+Stages, cards, hazards and the real forwarding / stall code: [`docs/pipeline_reference.pdf`](docs/pipeline_reference.pdf).
+
+| Hazard | Solution | Cost | Verified by |
+|---|---|---|---|
+| Structural | Harvard memories, separate regfile ports | 0 | all |
+| Data (read after write) | forwarding from EX/MEM and MEM/WB, WB→ID bypass | 0 | `tb_cpu_pipe_c` |
+| Load-use | hazard unit: hold PC and IF/ID, bubble into ID/EX | 1 cycle | `tb_cpu_pipe_d` |
+| Control | flush on taken branch / jump | 2 cycles | next (programs use 2 NOPs after jumps for now) |
+
+| Testbench | Program | What it checks |
+|---|---|---|
+| `tb_cpu_pipe_a` | `test_pipe_a.s` | IF/ID and ID/EX card contents, cycle by cycle (22) |
+| `tb_cpu_pipe_b` | `test_pipe_b.s` | full 5 stages: ALU, loads/stores, call/return, branch (13) |
+| `tb_cpu_pipe_c` | `test_pipe_c.s` | back-to-back dependencies, newest-write priority, bypass, x0 (13) |
+| `tb_cpu_pipe_d` | `test_pipe_d.s` | load right before its use (ALU, store data, branch), exactly 4 stalls (14) |
 
 ### Verified building blocks
 
@@ -95,15 +119,27 @@ CPU-level tests run a program and check the final register file and data memory:
 
 - **`sim.bat`**: compiles all packages and modules, then elaborates and runs one testbench in XSim.
 
+- **`run_all.bat`**: runs every `tb\tb_*.sv`, writes a PASS / FAIL summary to `regression.txt` and full logs to `build\logs\`.
+
+- **`synth_check.tcl`**: elaboration-only Vivado run for the Basys 3 part, to catch latches, multi-driven nets and unconnected logic. Top is `cpu` by default or given as an argument.
+
+  ```
+  cd build
+  vivado -mode batch -nojournal -nolog -source ..\synth_check.tcl -tclargs cpu_pipe
+  ```
+
 - **[`docs/rv32i_reference.pdf`](docs/rv32i_reference.pdf)**: instruction reference for this core: encodings, behaviour, control signals per opcode and machine-code examples. Regenerate after changing the control unit with `python docs/make_isa_ref.py` (needs Chrome or Edge).
+
+- **[`docs/pipeline_reference.pdf`](docs/pipeline_reference.pdf)**: the pipeline: stages, card fields, instruction × cycle diagrams, hazards with the real RTL, CPI and a bug checklist. Regenerate with `python docs/make_pipe_ref.py`.
 
 ## Layout
 
 ```
-rtl/        design (rtl/pkg/ compiled first)
+rtl/        design (rtl/pkg/ compiled first): cpu.sv, cpu_pipe.sv and their blocks
 tb/         testbenches (tb_<name>.sv)
 programs/   assembly sources (.s) and hex programs
-docs/       instruction reference (PDF + generator)
+docs/       instruction and pipeline references (PDF + generators)
+lessons/    early Verilog exercises, not part of the CPU or the regression
 rvasm.py    assembler
 ```
 
@@ -117,6 +153,6 @@ rvasm.py    assembler
 ## Roadmap
 
 1. ~~Complete single-cycle core: all branches, LUI, AUIPC~~ ✅ done (Nov 2026)
-2. 5-stage pipeline: forwarding, load-use stall, flush
+2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, flush, then CPI and Fmax vs single-cycle on the Basys 3
 3. Verification against `riscv-tests` and a reference model
 4. C toolchain: run a compiled Hello World over a UART peripheral

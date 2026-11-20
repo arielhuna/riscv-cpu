@@ -64,7 +64,6 @@ module tb_dmem;
             check_mem(rand_addr);
         end
 
-
         if (errors == 0) $display("PASSED: %0d tests", tests);
         else             $display("FAILED: %0d errors out of %0d tests", errors, tests);
         $finish;

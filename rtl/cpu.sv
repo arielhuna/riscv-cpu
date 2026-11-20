@@ -57,18 +57,18 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     logic [1:0]  alu_a_sel;
 
     control u_control (
-        .opcode  (opcode),
-        .funct3  (funct3),
-        .instr30 (instr30),
-        .alu_op  (alu_op),
-        .alu_src (alu_src),
+        .opcode    (opcode),
+        .funct3    (funct3),
+        .instr30   (instr30),
+        .alu_op    (alu_op),
+        .alu_src   (alu_src),
         .alu_a_sel (alu_a_sel),
-        .wb_sel  (wb_sel),
-        .reg_we  (reg_we),
-        .mem_we  (mem_we),
-        .branch  (branch),
-        .jump    (jump),
-        .jalr    (jalr)
+        .wb_sel    (wb_sel),
+        .reg_we    (reg_we),
+        .mem_we    (mem_we),
+        .branch    (branch),
+        .jump      (jump),
+        .jalr      (jalr)
     );
 
     regfile u_regfile (
@@ -86,12 +86,11 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     logic [31:0] alu_a, alu_b;
     logic [31:0] alu_out;
     logic        alu_zero;
-    
 
     always_comb begin
         case (alu_a_sel)
-            2'd1:    alu_a = pc_cur;
-            2'd2:    alu_a = 32'h00000000;
+            2'd1:    alu_a = pc_cur;            // AUIPC
+            2'd2:    alu_a = 32'h00000000;      // LUI
             default: alu_a = rs1_data;
         endcase
     end
@@ -115,30 +114,27 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     assign ltu = rs1_data < rs2_data;                   // unsigned compare
 
     // ---------- Branch decision ----------
-    logic take_branch;
+    logic br_cond, take_branch;
 
-    logic br_cond;
     always_comb begin
         case (funct3)
-            3'b000:  br_cond = alu_zero;
-            3'b001:  br_cond = ~alu_zero;
-            3'b100:  br_cond = lt;
-            3'b101:  br_cond = ~lt;
-            3'b110:  br_cond = ltu;
-            3'b111:  br_cond = ~ltu;
+            3'b000:  br_cond = alu_zero;        // BEQ
+            3'b001:  br_cond = ~alu_zero;       // BNE
+            3'b100:  br_cond = lt;              // BLT
+            3'b101:  br_cond = ~lt;             // BGE
+            3'b110:  br_cond = ltu;             // BLTU
+            3'b111:  br_cond = ~ltu;            // BGEU
             default: br_cond = 1'b0;
         endcase
     end
     assign take_branch = branch & br_cond;
 
-    
-
     // ---------- Next PC ----------
     always_comb begin
         case ({jalr, jump | take_branch})
-            2'b10:   pc_next = {alu_out[31:1], 1'b0};   // JALR: rs1 + imm, bit 0 cleared
-            2'b01:   pc_next = pc_target;   // JAL, taken branch: pc + imm
-            default: pc_next = pc_plus4;   // everything else: pc + 4
+            2'b10:   pc_next = {alu_out[31:1], 1'b0};  // JALR: rs1 + imm, bit 0 cleared
+            2'b01:   pc_next = pc_target;              // JAL, taken branch: pc + imm
+            default: pc_next = pc_plus4;               // everything else: pc + 4
         endcase
     end
 
@@ -147,21 +143,20 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
 
     always_comb begin
         case (funct3)
-            3'b000:  st_data = {4{rs2_data[7:0]}};   // SB
+            3'b000:  st_data = {4{rs2_data[7:0]}};    // SB
             3'b001:  st_data = {2{rs2_data[15:0]}};   // SH
-            default: st_data = rs2_data;                  // SW
+            default: st_data = rs2_data;              // SW
         endcase
     end
-
 
     // ---------- Store: byte enables ----------
     logic [3:0] st_be;
 
     always_comb begin
         case (funct3)
-            3'b000:  st_be = 4'b0001 << alu_out[1:0];            // SB
-            3'b001:  st_be = alu_out[1] ? 4'b1100 : 4'b0011;     // SH
-            default: st_be = 4'b1111;                            // SW
+            3'b000:  st_be = 4'b0001 << alu_out[1:0];         // SB
+            3'b001:  st_be = alu_out[1] ? 4'b1100 : 4'b0011;  // SH
+            default: st_be = 4'b1111;                         // SW
         endcase
     end
 
@@ -170,12 +165,12 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
     dmem u_dmem (
         .clk   (clk),
         .we    (mem_we),
-        .be (st_be),
+        .be    (st_be),
         .addr  (alu_out),
         .wdata (st_data),
         .rdata (dmem_rdata)
     );
-    
+
     // ---------- Load: pick the byte ----------
     logic [7:0] ld_byte;
 
@@ -193,28 +188,25 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
 
     assign ld_half = alu_out[1] ? dmem_rdata[31:16] : dmem_rdata[15:0];
 
-
     // ---------- Load: extend to 32 bits ----------
     logic [31:0] ld_data;
 
     always_comb begin
         case (funct3)
-            3'b000:  ld_data = {{24{ld_byte[7]}}, ld_byte};  // LB
-            3'b010:  ld_data = dmem_rdata;                   // LW
-            3'b100:  ld_data = {{24{1'b0}}, ld_byte};        // LBU
-            3'b001:  ld_data = {{16{ld_half[15]}}, ld_half};  // LH
-            3'b101:  ld_data = {{16{1'b0}}, ld_half};         // LHU
+            3'b000:  ld_data = {{24{ld_byte[7]}}, ld_byte};    // LB
+            3'b010:  ld_data = dmem_rdata;                     // LW
+            3'b100:  ld_data = {{24{1'b0}}, ld_byte};          // LBU
+            3'b001:  ld_data = {{16{ld_half[15]}}, ld_half};   // LH
+            3'b101:  ld_data = {{16{1'b0}}, ld_half};          // LHU
             default: ld_data = dmem_rdata;
         endcase
     end
 
-
-
     // ---------- Write-back ----------
     always_comb begin
         case (wb_sel)
-            2'd0:    rd_data = alu_out;    // R, I
-            2'd1:    rd_data = ld_data; // loads
+            2'd0:    rd_data = alu_out;    // R, I, LUI, AUIPC
+            2'd1:    rd_data = ld_data;    // loads
             2'd2:    rd_data = pc_plus4;   // JAL, JALR
             default: rd_data = alu_out;    // 2'd3 unused
         endcase

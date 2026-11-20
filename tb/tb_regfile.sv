@@ -22,7 +22,7 @@ module tb_regfile;
         @(negedge clk);
         we = wen; rd = addr; rd_data = data;
         @(negedge clk);                  // wait for the write to take effect
-        we = 0; 
+        we = 0;
         if (wen && addr != 0)
             model[addr] = data;
     endtask

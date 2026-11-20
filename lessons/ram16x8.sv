@@ -8,7 +8,7 @@ module ram16x8 (
     logic [7:0] mem [0:15];
 
     initial begin
-        $readmemh("../programs/mem.hex", mem);
+        $readmemh("../lessons/mem.hex", mem);
     end
 
     always_ff @(posedge clk) begin

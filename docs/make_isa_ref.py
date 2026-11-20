@@ -57,7 +57,7 @@ GROUPS = [
         ctrl=dict(alu_op=None, alu_src="0", alu_a_sel="0", wb_sel="0", reg_we="1",
                   mem_we="0", branch="0", jump="0", jalr="0"),
         note="alu_op = {instr[30], funct3}: the ALU code is the instruction's own bits.",
-        tb="tb_cpu (test_ri), tb_alu",
+        tb="tb_cpu (test_ri), tb_alu_self",
         rows=[
             ("ADD",  "ADD rd, rs1, rs2",  "rd = rs1 + rs2",                 "000", "0000000", "ALU_ADD",  "ADD x5, x6, x7"),
             ("SUB",  "SUB rd, rs1, rs2",  "rd = rs1 − rs2",                 "000", "0100000", "ALU_SUB",  "SUB x5, x6, x7"),

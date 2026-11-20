@@ -34,7 +34,6 @@ module tb_pc;
         step(0, 32'h100, 32'h100);
         step(1, 32'hDEADBEEF, 32'b0);
 
-
         if (errors == 0) $display("PASSED: %0d tests", tests);
         else             $display("FAILED: %0d errors out of %0d tests", errors, tests);
         $finish;

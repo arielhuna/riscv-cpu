@@ -7,7 +7,7 @@ module dmem (
     input  logic [31:0] wdata,
     output logic [31:0] rdata
 );
-    logic [31:0] mem [0:255]; 
+    logic [31:0] mem [0:255];
 
     always_ff @(posedge clk) begin
         if (we) begin

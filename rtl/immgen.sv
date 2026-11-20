@@ -26,5 +26,5 @@ module immgen
                 imm = 32'b0;
             end
         endcase
-    end    
+    end
 endmodule

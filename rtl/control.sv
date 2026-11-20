@@ -17,15 +17,15 @@ module control import alu_pkg::*, rv32i_pkg::*; (
 
     always_comb begin
         // Safe defaults: unknown instruction = NOP
-        alu_op  = ALU_ADD;
-        alu_src = 1'b0;
+        alu_op    = ALU_ADD;
+        alu_src   = 1'b0;
         alu_a_sel = 2'd0;
-        wb_sel  = 2'd0;
-        reg_we  = 1'b0;
-        mem_we  = 1'b0;
-        branch  = 1'b0;
-        jump    = 1'b0;
-        jalr    = 1'b0;
+        wb_sel    = 2'd0;
+        reg_we    = 1'b0;
+        mem_we    = 1'b0;
+        branch    = 1'b0;
+        jump      = 1'b0;
+        jalr      = 1'b0;
 
         case (opcode)
             OP_R: begin
@@ -33,8 +33,7 @@ module control import alu_pkg::*, rv32i_pkg::*; (
                 reg_we = 1'b1;
             end
 
-            OP_LOAD: begin
-                alu_op  = ALU_ADD;
+            OP_LOAD: begin            // address = rs1 + imm
                 alu_src = 1'b1;
                 wb_sel  = 2'd1;
                 reg_we  = 1'b1;
@@ -45,54 +44,43 @@ module control import alu_pkg::*, rv32i_pkg::*; (
                     alu_op = alu_op_t'({instr30, funct3});
                 else // ADDI, SLTI, SLTIU, ANDI, ORI, XORI, SLLI
                     alu_op = alu_op_t'({1'b0, funct3});
-                alu_src = 1'b1; 
-                wb_sel  = 2'd0;
+                alu_src = 1'b1;
                 reg_we  = 1'b1;
             end
 
-            OP_STORE: begin
-                alu_op  = ALU_ADD;
+            OP_STORE: begin           // address = rs1 + imm
                 alu_src = 1'b1;
-                reg_we = 1'b0;
                 mem_we  = 1'b1;
             end
-            
-            OP_BRANCH: begin
+
+            OP_BRANCH: begin          // rs1 - rs2 -> zero flag
                 alu_op  = ALU_SUB;
-                alu_src = 1'b0;
-                reg_we = 1'b0;
-                mem_we  = 1'b0;
                 branch  = 1'b1;
             end
 
-            OP_JAL: begin
-                reg_we = 1'b1;
-                jump   = 1'b1;
-                wb_sel = 2'd2;
+            OP_JAL: begin             // rd = pc + 4, pc = pc + imm
+                wb_sel  = 2'd2;
+                reg_we  = 1'b1;
+                jump    = 1'b1;
             end
 
-            OP_JALR: begin
-                alu_op  = ALU_ADD;
+            OP_JALR: begin            // rd = pc + 4, pc = rs1 + imm
                 alu_src = 1'b1;
-                wb_sel = 2'd2;
-                reg_we = 1'b1;
-                jalr   = 1'b1;
-            end
-            
-            OP_LUI: begin
-                alu_op    = ALU_ADD;
-                alu_src   = 1'b1;
-                reg_we    = 1'b1;
-                alu_a_sel = 2'd2;
-                wb_sel    = 2'b0;
+                wb_sel  = 2'd2;
+                reg_we  = 1'b1;
+                jalr    = 1'b1;
             end
 
-            OP_AUIPC: begin
-                alu_op    = ALU_ADD;
+            OP_LUI: begin             // rd = 0 + imm
                 alu_src   = 1'b1;
+                alu_a_sel = 2'd2;
                 reg_we    = 1'b1;
+            end
+
+            OP_AUIPC: begin           // rd = pc + imm
+                alu_src   = 1'b1;
                 alu_a_sel = 2'd1;
-                wb_sel    = 2'b0;
+                reg_we    = 1'b1;
             end
 
             default: ;

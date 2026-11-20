@@ -25,7 +25,6 @@ module tb_imem;
         check(32'h0A, 32'h22222222);
         check(32'h0C, 32'hDEADBEEF);
 
-
         if (errors == 0) $display("PASSED: %0d tests", tests);
         else             $display("FAILED: %0d errors out of %0d tests", errors, tests);
         $finish;

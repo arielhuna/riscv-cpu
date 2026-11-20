@@ -5,7 +5,7 @@ module imem #(
     input  logic [31:0] addr,
     output logic [31:0] instr
 );
-    logic [31:0] mem [0:255]; 
+    logic [31:0] mem [0:255];
 
     initial begin
         $readmemh(MEM_FILE, mem);
