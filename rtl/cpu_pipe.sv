@@ -10,11 +10,12 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     // ==================== IF ====================
     logic [31:0] pc_cur, pc_next, pc_plus4;
     logic [31:0] instr;
+    logic        stall;    // from hazard unit in ID, used by IF too
 
     pc u_pc (
         .clk     (clk),
         .rst     (rst),
-        .pc_next (pc_next),
+        .pc_next (stall ? pc_cur : pc_next),
         .pc      (pc_cur)
     );
 
@@ -32,7 +33,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         if (rst) begin
             if_id.pc    <= 32'h0;
             if_id.instr <= 32'h00000013;   // NOP = ADDI x0, x0, 0
-        end else begin
+        end else if (!stall) begin
             if_id.pc    <= pc_cur;         // address of THIS instruction
             if_id.instr <= instr;
         end
@@ -104,12 +105,19 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     assign id_rs2_val = (wb_we && (wb_rd != 5'd0) && (wb_rd == rs2)) ? wb_data : rs2_data;
 
 
+    // Load-use hazard: load in EX, its rd is needed by the instruction in ID
+    assign stall = (id_ex.wb_sel == 2'd1) && (id_ex.rd != 5'd0) &&
+                ((id_ex.rd == rs1) || (id_ex.rd == rs2));
+
+
     // ---------- ID/EX register ----------
     id_ex_t id_ex;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             id_ex <= '0;               // all control = 0 -> NOP
+        end else if (stall) begin
+            id_ex <= '0;             // bubble: all control = 0 -> NOP
         end else begin
             // data
             id_ex.pc        <= if_id.pc;
