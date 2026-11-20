@@ -12,6 +12,12 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     logic [31:0] instr;
     logic        stall;    // from hazard unit in ID, used by IF too
 
+    // Pipeline cards (declared first: earlier stages read later cards)
+    if_id_t  if_id;
+    id_ex_t  id_ex;
+    ex_mem_t ex_mem;
+    mem_wb_t mem_wb;
+
     pc u_pc (
         .clk     (clk),
         .rst     (rst),
@@ -27,8 +33,6 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     assign pc_plus4 = pc_cur + 32'd4;
 
     // ---------- IF/ID register ----------
-    if_id_t if_id;
-
     always_ff @(posedge clk) begin
         if (rst) begin
             if_id.pc    <= 32'h0;
@@ -104,20 +108,17 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     assign id_rs1_val = (wb_we && (wb_rd != 5'd0) && (wb_rd == rs1)) ? wb_data : rs1_data;
     assign id_rs2_val = (wb_we && (wb_rd != 5'd0) && (wb_rd == rs2)) ? wb_data : rs2_data;
 
-
-    // Load-use hazard: load in EX, its rd is needed by the instruction in ID
+    // ---------- Hazard unit ----------
+    // Load-use: load in EX, its rd is needed by the instruction in ID
     assign stall = (id_ex.wb_sel == 2'd1) && (id_ex.rd != 5'd0) &&
-                ((id_ex.rd == rs1) || (id_ex.rd == rs2));
-
+                   ((id_ex.rd == rs1) || (id_ex.rd == rs2));
 
     // ---------- ID/EX register ----------
-    id_ex_t id_ex;
-
     always_ff @(posedge clk) begin
         if (rst) begin
             id_ex <= '0;               // all control = 0 -> NOP
         end else if (stall) begin
-            id_ex <= '0;             // bubble: all control = 0 -> NOP
+            id_ex <= '0;               // bubble: all control = 0 -> NOP
         end else begin
             // data
             id_ex.pc        <= if_id.pc;
@@ -153,7 +154,6 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     assign ex_hit_a = ex_mem.reg_we && (ex_mem.rd != 5'd0) && (ex_mem.rd == id_ex.rs1);
     assign ex_hit_b = ex_mem.reg_we && (ex_mem.rd != 5'd0) && (ex_mem.rd == id_ex.rs2);
 
-
     // Does the instruction in WB write the register EX reads?
     logic wb_hit_a, wb_hit_b;
     assign wb_hit_a = mem_wb.reg_we && (mem_wb.rd != 5'd0) && (mem_wb.rd == id_ex.rs1);
@@ -166,14 +166,12 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         else               fwd_a_val = id_ex.rs1_data;
     end
 
-    
     logic [31:0] fwd_b_val;
     always_comb begin
         if (ex_hit_b)      fwd_b_val = ex_mem.alu_out;   // newest write wins
         else if (wb_hit_b) fwd_b_val = wb_data;
         else               fwd_b_val = id_ex.rs2_data;
     end
-
 
     always_comb begin
         case (id_ex.alu_a_sel)
@@ -216,8 +214,6 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     end
     assign take_branch = id_ex.branch & br_cond;
 
-
-
     // ---------- Next PC ----------
     always_comb begin
         case ({id_ex.jalr, id_ex.jump | take_branch})
@@ -227,18 +223,15 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         endcase
     end
 
-
     // ---------- EX/MEM register ----------
-    ex_mem_t ex_mem;
-
     always_ff @(posedge clk) begin
         if (rst) begin
             ex_mem <= '0;                          // reg_we = mem_we = 0 -> NOP
         end else begin
             // data
-            ex_mem.pc_plus4 <= id_ex.pc + 32'd4;             // THIS instruction's pc + 4
-            ex_mem.alu_out  <= alu_out;               // born in EX
-            ex_mem.rs2_data <= fwd_b_val;               // x5 for SW
+            ex_mem.pc_plus4 <= id_ex.pc + 32'd4;   // THIS instruction's pc + 4
+            ex_mem.alu_out  <= alu_out;            // born in EX
+            ex_mem.rs2_data <= fwd_b_val;          // store data (forwarded)
             // fields
             ex_mem.rd       <= id_ex.rd;
             ex_mem.funct3   <= id_ex.funct3;
@@ -248,7 +241,6 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             ex_mem.reg_we   <= id_ex.reg_we;
         end
     end
-
 
     // ==================== MEM ====================
     // Everything here comes from the EX/MEM card
@@ -264,15 +256,14 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         endcase
     end
 
-
-// ---------- Store: byte enables ----------
+    // ---------- Store: byte enables ----------
     logic [3:0] st_be;
 
     always_comb begin
         case (ex_mem.funct3)
-            3'b000:  st_be = 4'b0001 << ex_mem.alu_out[1:0];            // SB
-            3'b001:  st_be = ex_mem.alu_out[1] ? 4'b1100 : 4'b0011;     // SH
-            default: st_be = 4'b1111;                            // SW
+            3'b000:  st_be = 4'b0001 << ex_mem.alu_out[1:0];         // SB
+            3'b001:  st_be = ex_mem.alu_out[1] ? 4'b1100 : 4'b0011;  // SH
+            default: st_be = 4'b1111;                                // SW
         endcase
     end
 
@@ -319,10 +310,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         endcase
     end
 
-
     // ---------- MEM/WB register ----------
-    mem_wb_t mem_wb;
-
     always_ff @(posedge clk) begin
         if (rst) begin
             mem_wb <= '0;                  // reg_we = 0 -> NOP
@@ -352,6 +340,4 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             default: wb_data = mem_wb.alu_out;    // 2'd3 unused
         endcase
     end
-
-
 endmodule
