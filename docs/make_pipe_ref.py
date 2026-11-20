@@ -510,11 +510,21 @@ assign id_rs1_val = (wb_we &amp;&amp; (wb_rd != 5'd0)
     <div class="cols">
       <div>{lu}</div>
       <div><p>A load has its data only at the end of MEM (c4), but the next instruction needs it at the start of EX (c4).
-        <b>Forwarding is a wire, not a time machine.</b> Detect in ID, then for one cycle: freeze PC and IF/ID, and put a bubble
-        (NOP) into ID/EX. Next cycle the value is forwarded from MEM/WB.</p>
-<pre class="code">stall = id_ex.wb_sel == 1   <span class="c">// load in EX</span>
-     &amp;&amp; id_ex.rd != 0
-     &amp;&amp; (id_ex.rd == rs1 || id_ex.rd == rs2);</pre></div>
+        <b>Forwarding is a wire, not a time machine.</b> Detect in ID (last chance), then for one cycle:
+        hold PC and IF/ID, put a bubble into ID/EX. Next cycle the load is in WB and <span class="mono">wb_hit</span>
+        forwards <span class="mono">wb_data</span> (lesson 27 code, unchanged).</p>
+<pre class="code"><span class="c">// IF: declared here, IF uses it before ID</span>
+logic stall;
+.pc_next (stall ? pc_cur : pc_next),   <span class="c">// u_pc: hold</span>
+end else if (!stall) begin             <span class="c">// if_id: hold</span>
+<span class="c">// ID: load in EX and its rd is read here</span>
+assign stall = (id_ex.wb_sel == 2'd1) &amp;&amp; (id_ex.rd != 5'd0)
+    &amp;&amp; ((id_ex.rd == rs1) || (id_ex.rd == rs2));
+end else if (stall) begin              <span class="c">// id_ex: bubble</span>
+    id_ex &lt;= '0;</pre>
+        <p style="margin-top:1.2mm">Compare register <b>numbers</b> (<span class="mono">rs1</span>), not values (<span class="mono">rs1_data</span>).
+        No assignment in <span class="mono">always_ff</span> = hold (FF with enable). ID/EX is not held: the load must move on.
+        I-type has no rs2 (bits = imm) &rarr; sometimes an extra stall: slower, never wrong.</p></div>
     </div></div>
 
   <div class="hz"><h3>{stag("EX")}<span>Control</span><span class="cost">lesson 29 · flush, 2 cycles per taken jump</span></h3>
@@ -564,6 +574,8 @@ assign id_rs1_val = (wb_we &amp;&amp; (wb_rd != 5'd0)
         ("Use right after LW gets the address", "WB forwards " + m("mem_wb.alu_out"), "forward " + m("wb_data")),
         ("Back-to-back writes: old value used", "WB checked before EX/MEM", "EX/MEM first (newest)"),
         ("x0 becomes non-zero via forwarding", "missing " + m("rd != 0"), "add the guard"),
+        ("Use right after LW: value of the address / x", "no stall, or rs1_data compared", m("stall") + " on reg numbers (28)"),
+        ("Instruction after a stall vanishes", "IF/ID not held", m("else if (!stall)") + " on if_id"),
         ("Program runs code after a taken jump", "no flush yet", "NOPs after jumps (26b) / flush (29)"),
         ("tb fails by one cycle", "counted the stage, not the cycle", "draw the instr × cycle grid"),
     ])}
@@ -575,7 +587,7 @@ assign id_rs1_val = (wb_we &amp;&amp; (wb_rd != 5'd0)
         ("26a ✓", "pipe_pkg, IF/ID, ID/EX, EX stage", m("tb_cpu_pipe_a") + " · 22 checks, cards cycle by cycle"),
         ("26b ✓", "EX/MEM, MEM/WB, MEM stage, WB drives regfile", m("tb_cpu_pipe_b") + " · 13 checks, 3 instr between dependents, 2 NOPs after jumps"),
         ("27 ✓", "forwarding (EX/MEM, MEM/WB) + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
-        ("28", "load-use stall (hazard unit)", "lw followed by use"),
+        ("28 ✓", "load-use stall: hold PC + IF/ID, bubble into ID/EX", m("tb_cpu_pipe_d") + " · 14 checks, lw right before use, stalls == 4"),
         ("29", "flush on taken branch / jump", m("test_sort") + " on cpu_pipe"),
         ("30", "CPI, Basys 3 synthesis, Fmax vs single-cycle", m("synth_check -top cpu_pipe")),
     ])}
