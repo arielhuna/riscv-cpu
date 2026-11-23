@@ -37,7 +37,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     always_ff @(posedge clk) begin
         if (rst) begin
             if_id.pc    <= 32'h0;
-            if_id.instr <= 32'h00000013;    // NOP = ADDI x0, x0, 0
+            if_id.instr <= 32'h00000013;   // NOP = ADDI x0, x0, 0
         end else if (flush) begin
             if_id.pc    <= 32'h0;
             if_id.instr <= 32'h00000013;   // wrong path -> NOP
