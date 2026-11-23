@@ -40,7 +40,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             if_id.instr <= 32'h00000013;    // NOP = ADDI x0, x0, 0
         end else if (flush) begin
             if_id.pc    <= 32'h0;
-            if_id.instr <= 32'h00000013;    // wrong path -> NOP
+            if_id.instr <= 32'h00000013;   // wrong path -> NOP
         end else if (!stall) begin
             if_id.pc    <= pc_cur;         // address of THIS instruction
             if_id.instr <= instr;
@@ -220,7 +220,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
 
     // ---------- Flush: kill the 2 wrong-path instructions in IF and ID ----------
     assign flush = take_branch | id_ex.jalr | id_ex.jump;
-    
+
     // ---------- Next PC ----------
     always_comb begin
         case ({id_ex.jalr, id_ex.jump | take_branch})

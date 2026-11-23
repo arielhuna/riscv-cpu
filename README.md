@@ -3,7 +3,7 @@
 RV32I processor written from scratch in SystemVerilog, in two versions:
 
 - **`cpu`**: single-cycle core, all 37 base instructions (tag `v1-single-cycle`).
-- **`cpu_pipe`**: 5-stage pipeline (IF, ID, EX, MEM, WB) with forwarding, a WB→ID bypass and a load-use hazard unit. Flush on taken branches is next.
+- **`cpu_pipe`**: 5-stage pipeline (IF, ID, EX, MEM, WB) with forwarding, a WB→ID bypass, a load-use hazard unit and flush on taken branches / jumps. All hazards are handled in hardware: programs need no NOPs.
 
 Simulated in Vivado XSim; both cores elaborate cleanly for the Basys 3 board (Artix-7 `xc7a35tcpg236-1`).
 
@@ -61,7 +61,7 @@ Encodings, behaviour and control signals for each one: [`docs/rv32i_reference.pd
 | Upper immediate | LUI, AUIPC | `tb_cpu_br` |
 | Full program | bubble sort: nested loops, signed compare, call / return | `tb_cpu_sort` |
 
-Full regression: `.\run_all` runs 18 self-checking testbenches, 7,864 checks, all passing.
+Full regression: `.\run_all` runs 19 self-checking testbenches, 7,879 checks, all passing.
 
 ### Pipeline
 
@@ -73,7 +73,7 @@ Stages, cards, hazards and the real forwarding / stall code: [`docs/pipeline_ref
 | Structural | Harvard memories, separate regfile ports | 0 | all |
 | Data (read after write) | forwarding from EX/MEM and MEM/WB, WB→ID bypass | 0 | `tb_cpu_pipe_c` |
 | Load-use | hazard unit: hold PC and IF/ID, bubble into ID/EX | 1 cycle | `tb_cpu_pipe_d` |
-| Control | flush on taken branch / jump | 2 cycles | next (programs use 2 NOPs after jumps for now) |
+| Control | predict not-taken; flush IF/ID and ID/EX on taken branch / jump | 2 cycles per taken jump | `tb_cpu_pipe_e` |
 
 | Testbench | Program | What it checks |
 |---|---|---|
@@ -81,6 +81,7 @@ Stages, cards, hazards and the real forwarding / stall code: [`docs/pipeline_ref
 | `tb_cpu_pipe_b` | `test_pipe_b.s` | full 5 stages: ALU, loads/stores, call/return, branch (13) |
 | `tb_cpu_pipe_c` | `test_pipe_c.s` | back-to-back dependencies, newest-write priority, bypass, x0 (13) |
 | `tb_cpu_pipe_d` | `test_pipe_d.s` | load right before its use (ALU, store data, branch), exactly 4 stalls (14) |
+| `tb_cpu_pipe_e` | `test_pipe_e.s` | no NOPs after jumps: wrong-path code never runs, a wrong-path jump never redirects, load-use + branch, exactly 5 flushes (15) |
 
 ### Verified building blocks
 
@@ -153,6 +154,6 @@ rvasm.py    assembler
 ## Roadmap
 
 1. ~~Complete single-cycle core: all branches, LUI, AUIPC~~ ✅ done (Nov 2026)
-2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, flush, then CPI and Fmax vs single-cycle on the Basys 3
+2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, then CPI and Fmax vs single-cycle on the Basys 3
 3. Verification against `riscv-tests` and a reference model
 4. C toolchain: run a compiled Hello World over a UART peripheral

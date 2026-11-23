@@ -529,11 +529,21 @@ end else if (stall) begin              <span class="c">// id_ex: bubble</span>
 
   <div class="hz"><h3>{stag("EX")}<span>Control</span><span class="cost">lesson 29 · flush, 2 cycles per taken jump</span></h3>
     <div class="cols">
-      <div>{ctl}</div>
-      <div><p>The jump is decided in EX, but IF kept fetching (predict not-taken). When <span class="mono">take_branch | jump | jalr</span>
-        is 1, the two younger instructions (in ID and IF) are wrong: <b>flush</b> them, i.e. load NOP into IF/ID and ID/EX.
-        Not taken = no cost. Until lesson 29 the code after a jump must be NOPs.</p>
-<pre class="code">flush = take_branch | id_ex.jump | id_ex.jalr;</pre></div>
+      <div>{ctl}
+        <p style="margin-top:1.4mm">Predict not-taken: IF keeps fetching <span class="mono">pc + 4</span>. The jump is decided in EX (c3),
+        so ID and IF hold wrong-path instructions. Not taken = no cost.</p></div>
+      <div>
+<pre class="code">logic flush;                           <span class="c">// IF: declared early</span>
+end else if (flush) begin              <span class="c">// if_id: throw away</span>
+    if_id.instr &lt;= 32'h00000013;       <span class="c">// NOP (pc &lt;= 0)</span>
+end else if (!stall) begin             <span class="c">// if_id: hold</span>
+end else if (flush || stall) begin     <span class="c">// id_ex: bubble</span>
+    id_ex &lt;= '0;
+<span class="c">// EX: born here, jump / jalr of THIS instruction</span>
+assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
+        <p style="margin-top:1.2mm"><b>Stall holds, flush throws away:</b> IF/ID needs its own branch, ID/EX gets
+        <span class="mono">'0</span> either way. PC untouched (already <span class="mono">pc_target</span>).
+        Never meet: stall = load in EX, flush = jump in EX.</p></div>
     </div></div>
   {foot(4)}
 </div>"""
@@ -577,6 +587,8 @@ end else if (stall) begin              <span class="c">// id_ex: bubble</span>
         ("Use right after LW: value of the address / x", "no stall, or rs1_data compared", m("stall") + " on reg numbers (28)"),
         ("Instruction after a stall vanishes", "IF/ID not held", m("else if (!stall)") + " on if_id"),
         ("Program runs code after a taken jump", "no flush yet", "NOPs after jumps (26b) / flush (29)"),
+        ("Wrong-path jump still redirects the PC", "IF/ID not flushed (only ID/EX)", m("else if (flush)") + " on if_id, NOP instr"),
+        ("Flush one cycle early, link reg lost", m("jump") + " / " + m("jalr") + " of ID used", m("id_ex.jump | id_ex.jalr")),
         ("tb fails by one cycle", "counted the stage, not the cycle", "draw the instr × cycle grid"),
     ])}
   </section>
@@ -585,11 +597,11 @@ end else if (stall) begin              <span class="c">// id_ex: bubble</span>
     <h2>Roadmap <small>lessons 26–30</small></h2>
     {simple_table(["Lesson", "Adds", "Test"], [
         ("26a ✓", "pipe_pkg, IF/ID, ID/EX, EX stage", m("tb_cpu_pipe_a") + " · 22 checks, cards cycle by cycle"),
-        ("26b ✓", "EX/MEM, MEM/WB, MEM stage, WB drives regfile", m("tb_cpu_pipe_b") + " · 13 checks, 3 instr between dependents, 2 NOPs after jumps"),
-        ("27 ✓", "forwarding (EX/MEM, MEM/WB) + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
-        ("28 ✓", "load-use stall: hold PC + IF/ID, bubble into ID/EX", m("tb_cpu_pipe_d") + " · 14 checks, lw right before use, stalls == 4"),
-        ("29", "flush on taken branch / jump", m("test_sort") + " on cpu_pipe"),
-        ("30", "CPI, Basys 3 synthesis, Fmax vs single-cycle", m("synth_check -top cpu_pipe")),
+        ("26b ✓", "EX/MEM, MEM/WB, MEM, WB → regfile", m("tb_cpu_pipe_b") + " · 13 checks, 3-instr gaps, NOPs after jumps"),
+        ("27 ✓", "forwarding + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
+        ("28 ✓", "load-use stall: hold + bubble", m("tb_cpu_pipe_d") + " · 14 checks, lw right before use, stalls == 4"),
+        ("29 ✓", "flush: NOP into IF/ID, ID/EX", m("tb_cpu_pipe_e") + " · 15 checks, no NOPs after jumps, flushes == 5"),
+        ("30", "CPI, Basys 3, Fmax vs single-cycle", m("synth_check -top cpu_pipe")),
     ])}
   </section>
   {foot(5)}
