@@ -1,0 +1,25 @@
+00500293  // 0x00  addi t0, x0, 5
+00500313  // 0x04  addi t1, x0, 5
+000009B3  // 0x08  add s3, x0, x0
+04502023  // 0x0C  sw t0, 64(x0)
+00628663  // 0x10  beq t0, t1, l1
+06300413  // 0x14  addi s0, x0, 99
+0440006F  // 0x18  jal x0, bad
+00100493  // 0x1C  l1: addi s1, x0, 1
+02629E63  // 0x20  bne t0, t1, bad
+00200913  // 0x24  addi s2, x0, 2
+018000EF  // 0x28  jal ra, func
+00198993  // 0x2C  addi s3, s3, 1
+00049663  // 0x30  bnez s1, done
+06300A13  // 0x34  addi s4, x0, 99
+06300A93  // 0x38  addi s5, x0, 99
+0000006F  // 0x3C  done: jal x0, done
+04002603  // 0x40  func: lw a2, 64(x0)
+00560663  // 0x44  beq a2, t0, ok
+06300B13  // 0x48  addi s6, x0, 99
+06300B93  // 0x4C  addi s7, x0, 99
+00008067  // 0x50  ok: ret
+06300C13  // 0x54  addi s8, x0, 99
+06300C93  // 0x58  addi s9, x0, 99
+06300D13  // 0x5C  bad: addi s10, x0, 99
+FFDFF06F  // 0x60  jal x0, bad

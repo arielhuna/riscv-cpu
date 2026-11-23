@@ -11,6 +11,7 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     logic [31:0] pc_cur, pc_next, pc_plus4;
     logic [31:0] instr;
     logic        stall;    // from hazard unit in ID, used by IF too
+    logic        flush;    // from EX (taken branch / jump), used by IF/ID and ID/EX
 
     // Pipeline cards (declared first: earlier stages read later cards)
     if_id_t  if_id;
@@ -36,7 +37,10 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     always_ff @(posedge clk) begin
         if (rst) begin
             if_id.pc    <= 32'h0;
-            if_id.instr <= 32'h00000013;   // NOP = ADDI x0, x0, 0
+            if_id.instr <= 32'h00000013;    // NOP = ADDI x0, x0, 0
+        end else if (flush) begin
+            if_id.pc    <= 32'h0;
+            if_id.instr <= 32'h00000013;    // wrong path -> NOP
         end else if (!stall) begin
             if_id.pc    <= pc_cur;         // address of THIS instruction
             if_id.instr <= instr;
@@ -117,8 +121,8 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     always_ff @(posedge clk) begin
         if (rst) begin
             id_ex <= '0;               // all control = 0 -> NOP
-        end else if (stall) begin
-            id_ex <= '0;               // bubble: all control = 0 -> NOP
+        end else if (flush || stall) begin
+            id_ex <= '0;               // bubble (stall) or wrong path (flush)
         end else begin
             // data
             id_ex.pc        <= if_id.pc;
@@ -214,6 +218,9 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     end
     assign take_branch = id_ex.branch & br_cond;
 
+    // ---------- Flush: kill the 2 wrong-path instructions in IF and ID ----------
+    assign flush = take_branch | id_ex.jalr | id_ex.jump;
+    
     // ---------- Next PC ----------
     always_comb begin
         case ({id_ex.jalr, id_ex.jump | take_branch})
