@@ -4,7 +4,9 @@ module regfile (
     input  logic        we,
     input  logic [4:0]  rs1, rs2, rd,
     input  logic [31:0] rd_data,
-    output logic [31:0] rs1_data, rs2_data
+    output logic [31:0] rs1_data, rs2_data,
+    input  logic [4:0]  dbg_sel,      // debug read port (board LEDs)
+    output logic [31:0] dbg_data
 );
     logic [31:0] regs [0:31];
 
@@ -15,5 +17,6 @@ module regfile (
 
     assign rs1_data = (rs1 == 5'd0) ? 32'b0 : regs[rs1];
     assign rs2_data = (rs2 == 5'd0) ? 32'b0 : regs[rs2];
+    assign dbg_data = (dbg_sel == 5'd0) ? 32'b0 : regs[dbg_sel];
 
 endmodule

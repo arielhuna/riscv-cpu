@@ -3,8 +3,10 @@
 module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
     parameter string MEM_FILE = "../programs/sum.hex"
 ) (
-    input  logic clk,
-    input  logic rst
+    input  logic        clk,
+    input  logic        rst,
+    input  logic [4:0]  dbg_sel,      // debug: register number
+    output logic [31:0] dbg_data      // debug: its value
 );
 
     // ==================== IF ====================
@@ -104,7 +106,9 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
         .rd       (wb_rd),
         .rd_data  (wb_data),
         .rs1_data (rs1_data),
-        .rs2_data (rs2_data)
+        .rs2_data (rs2_data),
+        .dbg_sel  (dbg_sel),
+        .dbg_data (dbg_data)
     );
 
     // WB -> ID bypass: WB writes the register ID reads in the same cycle

@@ -3,8 +3,10 @@
 module cpu import alu_pkg::*, rv32i_pkg::*; #(
     parameter string MEM_FILE = "../programs/sum.hex"
 ) (
-    input  logic clk,
-    input  logic rst
+    input  logic        clk,
+    input  logic        rst,
+    input  logic [4:0]  dbg_sel,      // debug: register number
+    output logic [31:0] dbg_data      // debug: its value
 );
 
     // ---------- Fetch ----------
@@ -79,7 +81,9 @@ module cpu import alu_pkg::*, rv32i_pkg::*; #(
         .rd       (rd),
         .rd_data  (rd_data),
         .rs1_data (rs1_data),
-        .rs2_data (rs2_data)
+        .rs2_data (rs2_data),
+        .dbg_sel  (dbg_sel),
+        .dbg_data (dbg_data)
     );
 
     // ---------- Execute ----------
