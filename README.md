@@ -61,7 +61,7 @@ Encodings, behaviour and control signals for each one: [`docs/rv32i_reference.pd
 | Upper immediate | LUI, AUIPC | `tb_cpu_br` |
 | Full program | bubble sort: nested loops, signed compare, call / return | `tb_cpu_sort` |
 
-Full regression: `.\run_all` runs 19 self-checking testbenches, 7,879 checks, all passing.
+Full regression: `.\run_all` runs 20 self-checking testbenches, 7,887 checks, all passing.
 
 ### Pipeline
 
@@ -82,6 +82,17 @@ Stages, cards, hazards and the real forwarding / stall code: [`docs/pipeline_ref
 | `tb_cpu_pipe_c` | `test_pipe_c.s` | back-to-back dependencies, newest-write priority, bypass, x0 (13) |
 | `tb_cpu_pipe_d` | `test_pipe_d.s` | load right before its use (ALU, store data, branch), exactly 4 stalls (14) |
 | `tb_cpu_pipe_e` | `test_pipe_e.s` | no NOPs after jumps: wrong-path code never runs, a wrong-path jump never redirects, load-use + branch, exactly 5 flushes (15) |
+| `tb_cpu_pipe_sort` | `test_sort.s` | the single-cycle bubble sort unchanged (no NOPs) on the pipeline: same results, 9 stalls, 24 flushes (8) |
+
+Performance on the bubble sort (101 instructions, 8 ns per stage assumed until the Basys 3 timing report):
+
+| | Single-cycle | Pipeline |
+|---|---|---|
+| Cycles | 101 | 161 (9 stalls, 24 flushes) |
+| CPI | 1 | 1.59 |
+| Time | 3,232 ns | 1,288 ns (×2.5) |
+
+Flushes are 79% of the extra cycles. Moving `j++` between the `LW` and its `BGE` (instruction scheduling) removes all 9 stalls: 152 cycles, CPI 1.50.
 
 ### Verified building blocks
 
@@ -154,6 +165,6 @@ rvasm.py    assembler
 ## Roadmap
 
 1. ~~Complete single-cycle core: all branches, LUI, AUIPC~~ ✅ done (Nov 2026)
-2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, then CPI and Fmax vs single-cycle on the Basys 3
+2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, ~~CPI~~ ✅, then Fmax vs single-cycle on the Basys 3
 3. Verification against `riscv-tests` and a reference model
 4. C toolchain: run a compiled Hello World over a UART peripheral

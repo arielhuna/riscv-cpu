@@ -558,8 +558,10 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         <div class="big mono" style="margin-bottom:1.5mm">cycles = N + 4 + S + 2·J</div>
         <b>N</b> instructions, <b>4</b> to fill the pipe, <b>S</b> load-use stalls, <b>J</b> taken branches and jumps.
         CPI = cycles / N. Single-cycle has CPI = 1 but a 4× longer clock.<br><br>
-        <b>Example:</b> N = 100, J = 20, S = 5 → 100 + 4 + 5 + 40 = 149 cycles, CPI ≈ 1.49,
-        at 8 ns = 1192 ns vs 3200 ns single-cycle (×2.7).
+        <b>Measured</b> (<span class="mono">tb_cpu_pipe_sort</span>, bubble sort): N = 101, S = 9 (LW t5 &rarr; BGE, 3 &times; 3),
+        J = 24 &rarr; 162 by formula, 161 until <span class="mono">done</span> enters EX. CPI &asymp; 1.59;
+        at 8 ns = 1288 ns vs 3232 ns single-cycle (&times;2.5, not &times;4). Flushes are 48 of the 61 extra cycles (79%).<br>
+        <b>Scheduling:</b> move <span class="mono">j++</span> between LW and BGE &rarr; S = 0, 152 cycles, CPI 1.50.
       </div>
       <div>{simple_table(["", "Single-cycle", "Pipeline"], [
             ("Registers in datapath", "PC only", "PC + 4 cards"),
@@ -601,7 +603,8 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         ("27 ✓", "forwarding + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
         ("28 ✓", "load-use stall: hold + bubble", m("tb_cpu_pipe_d") + " · 14 checks, lw right before use, stalls == 4"),
         ("29 ✓", "flush: NOP into IF/ID, ID/EX", m("tb_cpu_pipe_e") + " · 15 checks, no NOPs after jumps, flushes == 5"),
-        ("30", "CPI, Basys 3, Fmax vs single-cycle", m("synth_check -top cpu_pipe")),
+        ("30a ✓", "CPI on bubble sort, scheduling", m("tb_cpu_pipe_sort") + " · 8 checks, stalls == 9, flushes == 24, CPI 1.59"),
+        ("30b", "Basys 3: synthesis, Fmax vs single-cycle", "place &amp; route, timing report"),
     ])}
   </section>
   {foot(5)}
