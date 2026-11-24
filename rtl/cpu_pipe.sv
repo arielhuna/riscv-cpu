@@ -358,4 +358,25 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
             default: wb_data = mem_wb.alu_out;    // 2'd3 unused
         endcase
     end
+
+    // ---------- Assertions (simulation only) ----------
+    `ifndef SYNTHESIS
+        always @(posedge clk) begin
+            if (!rst) begin
+                // a store has no rd: [11:7] is imm[4:0]
+                assert (!(mem_we && reg_we))
+                    else begin $display("FAILED: assertion store_writes_reg, pc = 0x%h", if_id.pc); $finish; end
+                // stall = load in EX, flush = jump in EX: only one instruction in EX
+                assert (!(stall && flush))
+                    else begin $display("FAILED: assertion stall_and_flush, pc = 0x%h", id_ex.pc); $finish; end
+                // instructions are 4 bytes; imem ignores addr[1:0], so a bad jump would fail silently
+                assert (pc_cur[1:0] == 2'b00)
+                    else begin $display("FAILED: assertion pc_misaligned, pc = 0x%h", pc_cur); $finish; end
+                // x on a control bit = unconnected wire or missing reset
+                assert (!$isunknown(id_ex.reg_we))
+                    else begin $display("FAILED: assertion reg_we_unknown, pc = 0x%h", id_ex.pc); $finish; end
+            end
+        end
+    `endif
+
 endmodule
