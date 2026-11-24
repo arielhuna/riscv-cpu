@@ -37,16 +37,20 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
 
     // ---------- IF/ID register ----------
     always_ff @(posedge clk) begin
+        // pc + instr[31:12]: don't care on flush, so only reset and stall touch them
         if (rst) begin
-            if_id.pc    <= 32'h0;
-            if_id.instr <= 32'h00000013;   // NOP = ADDI x0, x0, 0
-        end else if (flush) begin
-            if_id.pc    <= 32'h0;
-            if_id.instr <= 32'h00000013;   // wrong path -> NOP
+            if_id.pc           <= 32'h0;
+            if_id.instr[31:12] <= 20'h0;
         end else if (!stall) begin
-            if_id.pc    <= pc_cur;         // address of THIS instruction
-            if_id.instr <= instr;
+            if_id.pc           <= pc_cur;         // address of THIS instruction
+            if_id.instr[31:12] <= instr[31:12];
         end
+
+        // opcode + rd: ADDI x0 (NOP) on reset and on flush (wrong path)
+        if (rst || flush)
+            if_id.instr[11:0] <= 12'h013;
+        else if (!stall)
+            if_id.instr[11:0] <= instr[11:0];
     end
 
     // ==================== ID ====================
@@ -123,31 +127,34 @@ module cpu_pipe import alu_pkg::*, rv32i_pkg::*, pipe_pkg::*; #(
 
     // ---------- ID/EX register ----------
     always_ff @(posedge clk) begin
-        if (rst) begin
-            id_ex <= '0;               // all control = 0 -> NOP
-        end else if (flush || stall) begin
-            id_ex <= '0;               // bubble (stall) or wrong path (flush)
+        // data + datapath control: loaded every cycle (don't care in a bubble)
+        id_ex.pc        <= if_id.pc;
+        id_ex.rs1_data  <= id_rs1_val;
+        id_ex.rs2_data  <= id_rs2_val;
+        id_ex.imm       <= imm;
+        id_ex.rd        <= rd;
+        id_ex.rs1       <= rs1;
+        id_ex.rs2       <= rs2;
+        id_ex.funct3    <= funct3;
+        id_ex.alu_op    <= alu_op;
+        id_ex.alu_a_sel <= alu_a_sel;
+        id_ex.alu_src   <= alu_src;
+
+        // side effects + hazard unit: cleared on reset / bubble
+        if (rst || flush || stall) begin
+            id_ex.reg_we <= 1'b0;
+            id_ex.mem_we <= 1'b0;
+            id_ex.branch <= 1'b0;
+            id_ex.jump   <= 1'b0;
+            id_ex.jalr   <= 1'b0;
+            id_ex.wb_sel <= 2'd0;
         end else begin
-            // data
-            id_ex.pc        <= if_id.pc;
-            id_ex.rs1_data  <= id_rs1_val;
-            id_ex.rs2_data  <= id_rs2_val;
-            id_ex.imm       <= imm;
-            // fields
-            id_ex.rd        <= rd;
-            id_ex.rs1       <= rs1;
-            id_ex.rs2       <= rs2;
-            id_ex.funct3    <= funct3;
-            // control
-            id_ex.alu_op    <= alu_op;
-            id_ex.alu_a_sel <= alu_a_sel;
-            id_ex.wb_sel    <= wb_sel;
-            id_ex.alu_src   <= alu_src;
-            id_ex.reg_we    <= reg_we;
-            id_ex.mem_we    <= mem_we;
-            id_ex.branch    <= branch;
-            id_ex.jump      <= jump;
-            id_ex.jalr      <= jalr;
+            id_ex.reg_we <= reg_we;
+            id_ex.mem_we <= mem_we;
+            id_ex.branch <= branch;
+            id_ex.jump   <= jump;
+            id_ex.jalr   <= jalr;
+            id_ex.wb_sel <= wb_sel;
         end
     end
 
