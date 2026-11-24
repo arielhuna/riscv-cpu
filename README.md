@@ -5,7 +5,7 @@ RV32I processor written from scratch in SystemVerilog, in two versions:
 - **`cpu`**: single-cycle core, all 37 base instructions (tag `v1-single-cycle`).
 - **`cpu_pipe`**: 5-stage pipeline (IF, ID, EX, MEM, WB) with forwarding, a WB→ID bypass, a load-use hazard unit and flush on taken branches / jumps. All hazards are handled in hardware: programs need no NOPs.
 
-Simulated in Vivado XSim; both cores elaborate cleanly for the Basys 3 board (Artix-7 `xc7a35tcpg236-1`).
+Simulated in Vivado XSim, and both cores are built for the Basys 3 board (Artix-7 `xc7a35tcpg236-1`) through place & route and timing: see [FPGA](#fpga-basys-3).
 
 Every module was built and verified on its own with a self-checking testbench before being wired into the CPU, and both cores are verified by running real RV32I programs and checking register and memory state.
 
@@ -84,15 +84,14 @@ Stages, cards, hazards and the real forwarding / stall code: [`docs/pipeline_ref
 | `tb_cpu_pipe_e` | `test_pipe_e.s` | no NOPs after jumps: wrong-path code never runs, a wrong-path jump never redirects, load-use + branch, exactly 5 flushes (15) |
 | `tb_cpu_pipe_sort` | `test_sort.s` | the single-cycle bubble sort unchanged (no NOPs) on the pipeline: same results, 9 stalls, 24 flushes (8) |
 
-Performance on the bubble sort (101 instructions, 8 ns per stage assumed until the Basys 3 timing report):
+Cycles on the bubble sort (101 instructions):
 
 | | Single-cycle | Pipeline |
 |---|---|---|
 | Cycles | 101 | 161 (9 stalls, 24 flushes) |
 | CPI | 1 | 1.59 |
-| Time | 3,232 ns | 1,288 ns (×2.5) |
 
-Flushes are 79% of the extra cycles. Moving `j++` between the `LW` and its `BGE` (instruction scheduling) removes all 9 stalls: 152 cycles, CPI 1.50.
+Flushes are 79% of the extra cycles. Moving `j++` between the `LW` and its `BGE` (instruction scheduling) removes all 9 stalls: 152 cycles, CPI 1.50. On paper (8 ns per stage) this made the pipeline ×2.5 faster; on the FPGA it is not, see below.
 
 ### Verified building blocks
 
@@ -101,7 +100,7 @@ Each block has a self-checking testbench (random + corner cases, independent ref
 | Module | Description | Tests |
 |---|---|---|
 | `alu` | 10 operations + `zero` flag | 5,490 |
-| `regfile` | 32 x 32-bit, 2 read / 1 write ports, `x0` hardwired to 0 | 534 |
+| `regfile` | 32 x 32-bit, 2 read + 1 debug read / 1 write ports, `x0` hardwired to 0 | 534 |
 | `pc` | Program counter, synchronous reset | 13 |
 | `imem` | Instruction memory (ROM), loaded from a hex file | 5 |
 | `dmem` | Data memory, byte-enable writes, little-endian | 505 |
@@ -119,6 +118,42 @@ CPU-level tests run a program and check the final register file and data memory:
 | `tb_cpu_call` | `test_call.s` | JAL into a function, JALR return, skipped instruction never runs (5) |
 | `tb_cpu_br` | `test_br.s` | BLT / BLTU / BGE / BGEU with -1 vs 8 (signed and unsigned disagree), LUI, AUIPC (7) |
 | `tb_cpu_sort` | `test_sort.s` | bubble sort of {5, -3, 9, 0} in memory, called as a function (6) |
+
+## FPGA (Basys 3)
+
+`fpga/top_basys3.sv` wraps either core (`PIPE` parameter) for the board: an `MMCME2_BASE` turns the 100 MHz oscillator into the CPU clock (1000 / `CLK_DIV` MHz, default 66.7 MHz), a 2-FF synchronizer with power-on reset drives `rst` (center button), and a third, debug read port of the register file shows any register on the 16 LEDs (`sw[4:0]` = register number, `sw[15]` = upper half). The program (`test_sort.hex` by default) is loaded into `imem` at synthesis.
+
+```
+cd build
+vivado -mode batch -nojournal -nolog -source ..\fpga\build.tcl -tclargs 1 10 > build_pipe.log      # cpu_pipe, CLK_DIV = 10
+vivado -mode batch -nojournal -nolog -source ..\fpga\build.tcl -tclargs 0 10 > build_single.log    # cpu
+vivado -mode batch -nojournal -nolog -source ..\fpga\program.tcl -tclargs top_pipe.bit > program.log
+```
+
+`build.tcl` runs synthesis, place & route, utilization and timing reports and the bitstream, and prints `period`, `WNS` and `Fmax`. Fmax is measured with a deliberately too-fast clock (`CLK_DIV = 10`, 100 MHz), so the router works hard and the negative slack shows the real limit. Both cores meet timing at the default 66.7 MHz.
+
+| | Single-cycle `cpu` | Pipeline `cpu_pipe` |
+|---|---|---|
+| Fmax | **94.4 MHz** | 90.5 MHz (81.3 before the fanout fixes) |
+| Slice LUTs | 589 | 1,062 |
+| LUT as memory (regfile + dmem) | 194 | 194 |
+| Flip-flops | 34 | 449 |
+| CPI on bubble sort | 1 | 1.59 |
+| Bubble sort time | **1.07 µs** | 1.78 µs |
+
+**The single-cycle core wins: the pipeline is 1.66× slower.** To break even it would need 94.4 × 1.59 ≈ 150 MHz. The textbook ×4 assumes balanced stages and slow memories. Here every memory is distributed LUTRAM with an asynchronous read of about 1 ns, and `imem` is a small ROM, so the whole single-cycle path (`pc` → `imem` → regfile → compare → `pc_next`, 14 logic levels) fits in 10.4 ns. The pipeline's EX stage alone (forwarding compare → forward MUX → 32-bit compare → `take_branch` → `flush`) is about as long, and 80% of it is routing. With synchronous BRAM memories, as in a real CPU, the single-cycle design could not fetch and execute in one cycle and the pipeline would win.
+
+Timing closure on the pipeline, one critical path at a time:
+
+| Step | Fmax | Critical path ended at |
+|---|---|---|
+| Start: flush / stall reset whole cards | 81.3 MHz | `id_ex[...]/R`: `flush` drives 160 reset pins |
+| ID/EX bubble clears only the 6 control fields | 83.7 MHz | `if_id[...]/R` (64 bits) |
+| IF/ID flush writes only `instr[11:0]` = `ADDI x0` | 85.9 MHz | `id_ex[...]/CE`: unassigned fields became clock enables |
+| ID/EX data loaded every cycle (don't care in a bubble) | 84.9 MHz | `if_id[...]/CE` (52 bits) |
+| IF/ID `pc`, `instr[31:12]` only follow `!stall` | **90.5 MHz** | `if_id[instr][10]/R`: one of the 19 FFs that must change |
+
+A bubble only has to have no side effects (`reg_we`, `mem_we`, `branch`, `jump`, `jalr`) and must not look like a load to the hazard unit (`wb_sel`, or the stall never ends). Everything else it carries is don't care. Results moved by about 1 MHz between runs from place & route alone.
 
 ## Tools
 
@@ -150,6 +185,7 @@ CPU-level tests run a program and check the final register file and data memory:
 rtl/        design (rtl/pkg/ compiled first): cpu.sv, cpu_pipe.sv and their blocks
 tb/         testbenches (tb_<name>.sv)
 programs/   assembly sources (.s) and hex programs
+fpga/       Basys 3 top (MMCM, reset, LEDs), pin constraints, build and program scripts
 docs/       instruction and pipeline references (PDF + generators)
 lessons/    early Verilog exercises, not part of the CPU or the regression
 rvasm.py    assembler
@@ -165,6 +201,6 @@ rvasm.py    assembler
 ## Roadmap
 
 1. ~~Complete single-cycle core: all branches, LUI, AUIPC~~ ✅ done (Nov 2026)
-2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, ~~CPI~~ ✅, then Fmax vs single-cycle on the Basys 3
+2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, ~~CPI~~ ✅, ~~Fmax vs single-cycle on the Basys 3~~ ✅ (running on the board: pending)
 3. Verification against `riscv-tests` and a reference model
 4. C toolchain: run a compiled Hello World over a UART peripheral

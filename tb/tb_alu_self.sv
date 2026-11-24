@@ -52,7 +52,7 @@ module tb_alu_self
         alu_op = top;
         #1;
 
-        tests++;                                          // NEW
+        tests++;
         expected = alu_ref(ta, tb_, top);
         zero_expected = (expected == 32'h0);
         if (result !== expected || zero !== zero_expected) begin

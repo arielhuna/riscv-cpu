@@ -62,7 +62,8 @@ module tb_cpu_pipe_sort;
         rst = 1;
         repeat (2) @(negedge clk);
         rst = 0;
-        // 101 instructions (single-cycle) + 4 fill + 9 stalls + 2 x 24 flushes = 162, + margin
+        // 101 instructions (single-cycle) + 4 fill + 9 stalls + 2 x 24 flushes = 162 by formula
+        // (161 until done reaches EX), + margin
         repeat (200) @(negedge clk);
 
         // Same results as tb_cpu_sort: {5, -3, 9, 0} -> {-3, 0, 5, 9}

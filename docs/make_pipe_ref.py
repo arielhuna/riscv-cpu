@@ -339,7 +339,8 @@ def build_html():
         The gain comes from overlap: once the pipe is full, one instruction finishes every cycle.<br><br>
         <b>Why not ×5:</b> stages are not equal (ceiling ×4 = 32 / 8), the first instruction needs
         4 extra cycles to fill the pipe, and hazards add stalls and flushes.<br><br>
-        <b>Fmax for real</b> comes only after place &amp; route on the Basys 3 (lesson 30).
+        <b>Measured on the Basys 3</b> (30b): single-cycle 94.4 MHz, pipeline 90.5 MHz. LUTRAM memories read in ~1 ns,
+        so the stages are tiny and the hazard logic in EX costs as much as the whole single-cycle path (page 5).
       </div>
     </div>
   </section>
@@ -520,8 +521,8 @@ end else if (!stall) begin             <span class="c">// if_id: hold</span>
 <span class="c">// ID: load in EX and its rd is read here</span>
 assign stall = (id_ex.wb_sel == 2'd1) &amp;&amp; (id_ex.rd != 5'd0)
     &amp;&amp; ((id_ex.rd == rs1) || (id_ex.rd == rs2));
-end else if (stall) begin              <span class="c">// id_ex: bubble</span>
-    id_ex &lt;= '0;</pre>
+if (rst || flush || stall) begin       <span class="c">// id_ex: bubble =</span>
+    id_ex.reg_we &lt;= 1'b0; ...          <span class="c">// 6 control fields</span></pre>
         <p style="margin-top:1.2mm">Compare register <b>numbers</b> (<span class="mono">rs1</span>), not values (<span class="mono">rs1_data</span>).
         No assignment in <span class="mono">always_ff</span> = hold (FF with enable). ID/EX is not held: the load must move on.
         I-type has no rs2 (bits = imm) &rarr; sometimes an extra stall: slower, never wrong.</p></div>
@@ -534,16 +535,13 @@ end else if (stall) begin              <span class="c">// id_ex: bubble</span>
         so ID and IF hold wrong-path instructions. Not taken = no cost.</p></div>
       <div>
 <pre class="code">logic flush;                           <span class="c">// IF: declared early</span>
-end else if (flush) begin              <span class="c">// if_id: throw away</span>
-    if_id.instr &lt;= 32'h00000013;       <span class="c">// NOP (pc &lt;= 0)</span>
-end else if (!stall) begin             <span class="c">// if_id: hold</span>
-end else if (flush || stall) begin     <span class="c">// id_ex: bubble</span>
-    id_ex &lt;= '0;
-<span class="c">// EX: born here, jump / jalr of THIS instruction</span>
+if (rst || flush)                      <span class="c">// if_id: throw away</span>
+    if_id.instr[11:0] &lt;= 12'h013;      <span class="c">// ADDI x0 = NOP</span>
+if (rst || flush || stall) begin       <span class="c">// id_ex: clear 6 ctrl</span>
 assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
-        <p style="margin-top:1.2mm"><b>Stall holds, flush throws away:</b> IF/ID needs its own branch, ID/EX gets
-        <span class="mono">'0</span> either way. PC untouched (already <span class="mono">pc_target</span>).
-        Never meet: stall = load in EX, flush = jump in EX.</p></div>
+        <p style="margin-top:1.2mm"><b>Stall holds, flush throws away:</b> IF/ID needs its own branch, ID/EX bubbles either way.
+        PC untouched (already <span class="mono">pc_target</span>). Never meet: stall = load in EX, flush = jump in EX.
+        <b>30b:</b> only 19 control FFs cleared, data don't care: 81.3 &rarr; 90.5 MHz.</p></div>
     </div></div>
   {foot(4)}
 </div>"""
@@ -560,15 +558,16 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         CPI = cycles / N. Single-cycle has CPI = 1 but a 4× longer clock.<br><br>
         <b>Measured</b> (<span class="mono">tb_cpu_pipe_sort</span>, bubble sort): N = 101, S = 9 (LW t5 &rarr; BGE, 3 &times; 3),
         J = 24 &rarr; 162 by formula, 161 until <span class="mono">done</span> enters EX. CPI &asymp; 1.59;
-        at 8 ns = 1288 ns vs 3232 ns single-cycle (&times;2.5, not &times;4). Flushes are 48 of the 61 extra cycles (79%).<br>
+        at 8 ns (paper) &times;2.5. <b>Basys 3:</b> 161 / 90.5 MHz = 1.78 &micro;s vs 101 / 94.4 MHz = 1.07 &micro;s:
+        the pipeline is 1.66&times; <b>slower</b> (it would need 150 MHz). Flushes are 48 of the 61 extra cycles (79%).<br>
         <b>Scheduling:</b> move <span class="mono">j++</span> between LW and BGE &rarr; S = 0, 152 cycles, CPI 1.50.
       </div>
       <div>{simple_table(["", "Single-cycle", "Pipeline"], [
-            ("Registers in datapath", "PC only", "PC + 4 cards"),
             ("Clock", "sum of stages", "slowest stage"),
             ("CPI", "1", "1 + stalls + flushes"),
+            ("Fmax (Basys 3)", "94.4 MHz", "90.5 MHz"),
+            ("LUT / FF", "589 / 34", "1062 / 449"),
             ("Hazards", "none", "data, load-use, control"),
-            ("Extra hardware", "—", "forward MUXes, hazard unit"),
             ("Files", m("cpu.sv · tag v1-single-cycle"), m("cpu_pipe.sv")),
         ], "cmp")}</div>
     </div>
@@ -580,7 +579,6 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         ("Branch / AUIPC target off by 8", m("pc_cur") + " used in EX", m("id_ex.pc")),
         ("JAL writes the wrong link value", m("pc_plus4") + " (IF) in WB", m("id_ex.pc + 4") + " carried to WB"),
         ("Result lands in the wrong register", "rd taken from " + m("if_id.instr[11:7]"), "carry rd: id_ex → ex_mem → mem_wb"),
-        ("Field is x or of another instruction", "one hop not copied into the next card", "follow the signal card by card"),
         ("Writes happen during reset / flush", "card reset leaves reg_we or mem_we = 1", m("'0") + " or NOP instr"),
         ("Value correct 3 instr later, not 1–2", "no forwarding yet", "NOPs (26b) / forwarding (27)"),
         ("Use right after LW gets the address", "WB forwards " + m("mem_wb.alu_out"), "forward " + m("wb_data")),
@@ -591,6 +589,7 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         ("Program runs code after a taken jump", "no flush yet", "NOPs after jumps (26b) / flush (29)"),
         ("Wrong-path jump still redirects the PC", "IF/ID not flushed (only ID/EX)", m("else if (flush)") + " on if_id, NOP instr"),
         ("Flush one cycle early, link reg lost", m("jump") + " / " + m("jalr") + " of ID used", m("id_ex.jump | id_ex.jalr")),
+        ("Stalls forever after a partial bubble", m("wb_sel") + " kept = 1, stall sees the load again", "clear " + m("wb_sel") + " too"),
         ("tb fails by one cycle", "counted the stage, not the cycle", "draw the instr × cycle grid"),
     ])}
   </section>
@@ -603,8 +602,8 @@ assign flush = take_branch | id_ex.jump | id_ex.jalr;</pre>
         ("27 ✓", "forwarding + WB→ID bypass", m("tb_cpu_pipe_c") + " · 13 checks, no data NOPs; synth 48 warnings"),
         ("28 ✓", "load-use stall: hold + bubble", m("tb_cpu_pipe_d") + " · 14 checks, lw right before use, stalls == 4"),
         ("29 ✓", "flush: NOP into IF/ID, ID/EX", m("tb_cpu_pipe_e") + " · 15 checks, no NOPs after jumps, flushes == 5"),
-        ("30a ✓", "CPI on bubble sort, scheduling", m("tb_cpu_pipe_sort") + " · 8 checks, stalls == 9, flushes == 24, CPI 1.59"),
-        ("30b", "Basys 3: synthesis, Fmax vs single-cycle", "place &amp; route, timing report"),
+        ("30a ✓", "CPI on bubble sort, scheduling", m("tb_cpu_pipe_sort") + " · 8 checks, 9 stalls, 24 flushes, CPI 1.59"),
+        ("30b ✓", "Basys 3: Fmax vs single-cycle, fanout fixes", m("fpga/build.tcl") + " · 94.4 vs 90.5 MHz (was 81.3)"),
     ])}
   </section>
   {foot(5)}
