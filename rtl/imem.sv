@@ -5,10 +5,10 @@ module imem #(
     input  logic [31:0] addr,
     output logic [31:0] instr
 );
-    logic [31:0] mem [0:255];
+    logic [31:0] mem [0:1023];
 
     initial begin
         $readmemh(MEM_FILE, mem);
     end
-    assign instr = mem[addr[9:2]];
+    assign instr = mem[addr[11:2]];
 endmodule
