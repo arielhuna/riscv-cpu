@@ -7,7 +7,7 @@ RV32I processor written from scratch in SystemVerilog, in two versions:
 
 Simulated in Vivado XSim, and both cores are built for the Basys 3 board (Artix-7 `xc7a35tcpg236-1`) through place & route and timing: see [FPGA](#fpga-basys-3).
 
-Every module was built and verified on its own with a self-checking testbench before being wired into the CPU, and both cores are verified by running real RV32I programs and checking register and memory state.
+Every module was built and verified on its own with a self-checking testbench before being wired into the CPU, and both cores are verified by running real RV32I programs and checking register and memory state. **Both cores pass all 40 official `riscv-tests` rv32ui tests** (see [Verification](#verification)).
 
 ## Single-cycle datapath
 
@@ -61,7 +61,7 @@ Encodings, behaviour and control signals for each one: [`docs/rv32i_reference.pd
 | Upper immediate | LUI, AUIPC | `tb_cpu_br` |
 | Full program | bubble sort: nested loops, signed compare, call / return | `tb_cpu_sort` |
 
-Full regression: `.\run_all` runs 20 self-checking testbenches, 7,887 checks, all passing.
+Full regression: `.\run_all` runs 22 self-checking testbenches, 7,983 checks, all passing.
 
 ### Pipeline
 
@@ -102,7 +102,7 @@ Each block has a self-checking testbench (random + corner cases, independent ref
 | `alu` | 10 operations + `zero` flag | 5,490 |
 | `regfile` | 32 x 32-bit, 2 read + 1 debug read / 1 write ports, `x0` hardwired to 0 | 534 |
 | `pc` | Program counter, synchronous reset | 13 |
-| `imem` | Instruction memory (ROM), loaded from a hex file | 5 |
+| `imem` | Instruction memory (ROM, 1024 words), loaded from a hex file | 5 |
 | `dmem` | Data memory, byte-enable writes, little-endian | 505 |
 | `immgen` | Immediate generator for I/S/B/U/J formats | 1,200 |
 | `control` | Main decoder: ALU op, operand/write-back select, memory and PC control | 13 |
@@ -118,6 +118,25 @@ CPU-level tests run a program and check the final register file and data memory:
 | `tb_cpu_call` | `test_call.s` | JAL into a function, JALR return, skipped instruction never runs (5) |
 | `tb_cpu_br` | `test_br.s` | BLT / BLTU / BGE / BGEU with -1 vs 8 (signed and unsigned disagree), LUI, AUIPC (7) |
 | `tb_cpu_sort` | `test_sort.s` | bubble sort of {5, -3, 9, 0} in memory, called as a function (6) |
+
+## Verification
+
+Four layers, from the inside out:
+
+| Layer | What | Catches |
+|---|---|---|
+| Unit testbenches | every block against an independent model, random + corner cases | a wrong block |
+| Program testbenches | `tb_cpu_*`, `tb_cpu_pipe_*`: real programs, registers / memory / pipeline cards checked | wrong wiring, wrong timing |
+| Assertions | rules checked every cycle inside `cpu_pipe` (simulation only) | a rule broken mid-run, even if the final result looks right |
+| Official tests | `riscv-tests` rv32ui on both cores | a misread of the ISA spec (tests written by someone else) |
+
+**Assertions** (`cpu_pipe.sv`, inside `` `ifndef SYNTHESIS ``, so they add no hardware): a store never writes a register, `stall` and `flush` are never active together, every PC is 4-byte aligned (`imem` ignores `addr[1:0]`, so a misaligned jump would otherwise fail silently), and `reg_we` is never `x` after reset (an unconnected wire). A failing assertion prints `FAILED: assertion <name>, pc = ...` and stops, so `run_all` marks the test FAIL. Re-adding an old bug (`reg_we = 1` for stores) passes `tb_cpu_mem` but stops `tb_cpu_pipe_b` at the first store.
+
+**Signature tests** (`tb_cpu_sig`, `programs/test_sig.s`): the program stores its results to a fixed area (8 words at 0x200) and writes 1 to `tohost` (0x3FC) when done. The testbench knows nothing about the program: it runs `cpu` and `cpu_pipe` side by side, waits for `tohost`, dumps both signatures to files (`$writememh`) and compares them with `test_sig.ref`. Because the pipeline is in order, the `tohost` store is always the last write.
+
+**`riscv-tests`** (`tb_rvtests`, [`rvtests/`](rvtests/)): the 40 rv32ui tests (all except `fence_i` and `ma_data`), compiled with a minimal environment of our own (no CSRs: pass writes 1 to `tohost`, fail writes the failing test case number). One simulation loads each test into both cores in turn and checks `tohost`: **80 / 80 pass**.
+
+**Reference model** (`refmodel.py`, in progress): an instruction-set simulator in Python, one instruction at a time with no timing, used to produce expected results for any program. Done so far: sign extension, field decode, the five immediate formats and the ALU, each with its own self-test.
 
 ## FPGA (Basys 3)
 
@@ -164,6 +183,8 @@ A bubble only has to have no side effects (`reg_we`, `mem_we`, `branch`, `jump`,
   python rvasm.py -e "SW x5, 4(x6)"           # encode a single line
   ```
 
+- **`rvtests/build.py`**: rebuilds the `riscv-tests` hex files (needs `riscv64-unknown-elf-gcc` and a `riscv-tests` checkout).
+
 - **`sim.bat`**: compiles all packages and modules, then elaborates and runs one testbench in XSim.
 
 - **`run_all.bat`**: runs every `tb\tb_*.sv`, writes a PASS / FAIL summary to `regression.txt` and full logs to `build\logs\`.
@@ -186,9 +207,11 @@ rtl/        design (rtl/pkg/ compiled first): cpu.sv, cpu_pipe.sv and their bloc
 tb/         testbenches (tb_<name>.sv)
 programs/   assembly sources (.s) and hex programs
 fpga/       Basys 3 top (MMCM, reset, LEDs), pin constraints, build and program scripts
+rvtests/    riscv-tests rv32ui compiled for this CPU (env, linker script, build script, hex)
 docs/       instruction and pipeline references (PDF + generators)
 lessons/    early Verilog exercises, not part of the CPU or the regression
 rvasm.py    assembler
+refmodel.py reference model (in progress)
 ```
 
 ## Run
@@ -202,5 +225,5 @@ rvasm.py    assembler
 
 1. ~~Complete single-cycle core: all branches, LUI, AUIPC~~ ✅ done (Nov 2026)
 2. 5-stage pipeline: ~~forwarding~~ ✅, ~~load-use stall~~ ✅, ~~flush~~ ✅, ~~CPI~~ ✅, ~~Fmax vs single-cycle on the Basys 3~~ ✅ (running on the board: pending)
-3. Verification against `riscv-tests` and a reference model
+3. Verification: ~~assertions~~ ✅, ~~signature tests~~ ✅, ~~`riscv-tests`~~ ✅ (40 / 40 on both cores), reference model (in progress)
 4. C toolchain: run a compiled Hello World over a UART peripheral
